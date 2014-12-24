@@ -69,7 +69,7 @@ uint32_t idx = 0;
 
 int _read(int fd, void *buf, uint32_t count)
 {
-    int lcount = 0;
+  /*  int lcount = 0;
     char *p = buf;
     while(idx < 16 && lcount < count)
     {
@@ -77,12 +77,13 @@ int _read(int fd, void *buf, uint32_t count)
         idx++;
         lcount ++;
     }
-    return lcount;
+    return lcount;*/
 
 
-    /*
+
     uint32_t got = 0;
     uint32_t tmp;
+    int i;
     while(got < count) {
         tmp = k_read(fd, &((uint8_t*)buf)[got], count - got);
         if (tmp >= 0) {
@@ -90,9 +91,10 @@ int _read(int fd, void *buf, uint32_t count)
         } else {
             return tmp;
         }
+        if (tmp == 0 && got > 0) break;
     }
     return got;
-    */
+
 }
 
 
@@ -137,7 +139,7 @@ void __attribute__((used)) _start2()
 	/* Clear the zero segment */
 	for (pDest = &_szero; pDest < &_ezero;) *pDest++ = 0;
 
-
+    #if 0
     printf("==[TESTSUITE_STARTING]==\n");
     {
         int x = 5;
@@ -196,8 +198,8 @@ void __attribute__((used)) _start2()
         printf(" > 0x%08x '%s'\n", (uint32_t) rv, rv);
     }
     printf("==[TESTSUITE COMPLETE]==\n");
-
-    while(1);
+    #endif
+    //while(1);
     main();
     /* load symbols */
     //loadsyms();
