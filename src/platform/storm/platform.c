@@ -19,12 +19,31 @@
 #include "interface.h"
 // ****************************************************************************
 // Platform initialization
-
+void ssend(int fd, char c)
+{
+    k_write(fd, &c, 1);
+}
+int srecv(timer_data_type to)
+{
+    unsigned char rv;
+    unsigned int rrv;
+    while (1)
+    {
+        rrv = k_read(0, &rv, 1);
+        if (rrv != 0) {
+            return rv;
+        }
+        if (to != PLATFORM_TIMER_INF_TIMEOUT)
+        {
+            return -1;
+        }
+    }
+}
 int platform_init()
 {
-  printf("Platform init called\n");
   cmn_platform_init();
-
+  std_set_send_func(ssend);
+  std_set_get_func(srecv);
   return PLATFORM_OK;
 } 
 

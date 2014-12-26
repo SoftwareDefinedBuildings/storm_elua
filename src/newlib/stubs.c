@@ -160,6 +160,52 @@ off_t _lseek_r( struct _reent *r, int file, off_t off, int whence )
   return pinst->pdev->p_lseek_r( r, DM_GET_FD( file ), off, whence, pinst->pdata );
 }
 
+// *****************************************************************************
+// _read_r
+_ssize_t _read_r( struct _reent *r, int file, void *ptr, size_t len )
+{
+  const DM_INSTANCE_DATA* pinst;
+
+  // Find device, check read function
+  pinst = dm_get_instance_at( DM_GET_DEVID( file ) );
+  if( pinst->pdev->p_read_r == NULL )
+  {
+    r->_errno = ENOSYS;
+    return -1;
+  }
+
+  // And call the read function
+  return pinst->pdev->p_read_r( r, DM_GET_FD( file ), ptr, len, pinst->pdata );
+}
+
+
+_ssize_t read( int file, void *ptr, size_t len )
+{
+  return _read_r( _REENT, file, ptr, len );
+}
+
+// *****************************************************************************
+// _write_r
+_ssize_t _write_r( struct _reent *r, int file, const void *ptr, size_t len )
+{
+  const DM_INSTANCE_DATA *pinst;
+
+  // Find device, check write function
+  pinst = dm_get_instance_at( DM_GET_DEVID( file ) );
+  if( pinst->pdev->p_write_r == NULL )
+  {
+    r->_errno = ENOSYS;
+    return -1;
+  }
+
+  // And call the write function
+  return pinst->pdev->p_write_r( r, DM_GET_FD( file ), ptr, len, pinst->pdata );
+}
+
+_ssize_t write( int file, const void *ptr, size_t len )
+{
+  return _write_r( _REENT, file, ptr, len );
+}
 
 // ****************************************************************************
 // _mkdir_r
