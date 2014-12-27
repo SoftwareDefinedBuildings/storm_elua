@@ -1,4 +1,3 @@
-
 #include "interface.h"
 #include <stdint.h>
 #include <sys/stat.h>
@@ -6,33 +5,19 @@
 #include <string.h>
 #include <stdlib.h>
 
-volatile uint32_t foobar;
-uint32_t __attribute__((naked)) k_get_kernel_version()
-{
-    __syscall(ABI_ID_GET_KERNEL_VERSION);
-}
-int32_t __attribute__((naked)) k_write(uint32_t fd, uint8_t const *src, uint32_t size)
-{
-    __syscall(ABI_ID_WRITE);
-}
-void __attribute__((naked)) k_yield()
-{
-    __syscall(ABI_ID_YIELD);
-}
-int32_t __attribute__((naked)) k_read(uint32_t fd, uint8_t *dst, uint32_t size)
-{
-    __syscall(ABI_ID_READ);
-}
+//------------------------------
+// LIBC SUPPORT STUBS
+//------------------------------
 
 extern void* __ram_end__;
 void* _sbrk(uint32_t increment)
 {
     extern uint8_t *end;
     static uint8_t *heap_end = 0;
-    char *prev_heap_end;
+    uint8_t *prev_heap_end;
     if (heap_end == 0)
     {
-        heap_end = &end;
+        heap_end =(uint8_t*) &end;
     }
     prev_heap_end = heap_end;
     heap_end += increment;
@@ -64,24 +49,11 @@ int _lseek(int fd, uint32_t offset, int whence)
 {
     return -1;
 }
-char * static_input = "hello\nfoobar\nxx\nxxxxxxxxxx";
-uint32_t idx = 0;
-
 int _read(int fd, void *buf, uint32_t count)
 {
-  /*  int lcount = 0;
-    char *p = buf;
-    while(idx < 16 && lcount < count)
-    {
-        *p++ = static_input[idx];
-        idx++;
-        lcount ++;
-    }
-    return lcount;*/
-
-
-
-    uint32_t got = 0;
+    return k_read(fd, (uint8_t*) buf, count);
+    /*
+ uint32_t got = 0;
     uint32_t tmp;
     int i;
     while(got < count) {
@@ -94,11 +66,17 @@ int _read(int fd, void *buf, uint32_t count)
         if (tmp == 0 && got > 0) break;
     }
     return got;
-
+    */
 }
 
+void _fini()
+{
+}
 
-// Symbols defined in the linker file
+//------------------------------
+// _start and _start2 entrypoints
+//------------------------------
+
 extern uint32_t _sfixed;
 extern uint32_t _efixed;
 extern uint32_t _etext;
@@ -109,10 +87,6 @@ extern uint32_t _ezero;
 extern uint32_t _sstack;
 extern uint32_t _estack;
 extern void (*_init)();
-
-//Main function
-extern void setup();
-
 extern void main();
 
 void __attribute__(( naked , used )) _start()
@@ -122,7 +96,6 @@ void __attribute__(( naked , used )) _start()
                  "bx lr" : : : "r0", "r1" );
 }
 
-char inarray[80];
 /* This function is not intended to return! */
 void __attribute__((used)) _start2()
 {
@@ -140,6 +113,8 @@ void __attribute__((used)) _start2()
 	for (pDest = &_szero; pDest < &_ezero;) *pDest++ = 0;
 
     #if 0
+    //This is a libc sanity check, many problems with malloc/stacks
+    //and weak symbol overrides are caught by this
     printf("==[TESTSUITE_STARTING]==\n");
     {
         int x = 5;
@@ -199,19 +174,44 @@ void __attribute__((used)) _start2()
     }
     printf("==[TESTSUITE COMPLETE]==\n");
     #endif
-    //while(1);
+
     main();
-    /* load symbols */
-    //loadsyms();
 
-    /* create a timeslice for the setup() function */
-    //request_timeslice(1, 1, setup);
-
-    /* return back to the kernel */
-
+    // It's not technically the end of the world if main exits
+    // we would still execute any callbacks that it asked for
+    // don't _fini here obviously.
     return;
 }
 
-void _fini()
+//------------------------------
+// Kernel ABI functions
+//------------------------------
+
+uint32_t __attribute__((naked)) k_get_kernel_version()
 {
+    __syscall_body(ABI_ID_GET_KERNEL_VERSION);
+}
+int32_t __attribute__((naked)) k_write(uint32_t fd, uint8_t const *src, uint32_t size)
+{
+    __syscall_body(ABI_ID_WRITE);
+}
+void __attribute__((naked)) k_yield()
+{
+    __syscall_body(ABI_ID_YIELD);
+}
+int32_t __attribute__((naked)) k_read(uint32_t fd, uint8_t *dst, uint32_t size)
+{
+    __syscall_body(ABI_ID_READ);
+}
+int32_t __attribute__((naked)) k_read_async(uint32_t fd, uint8_t *dst, uint32_t size, cb_i32_t cb, void* r)
+{
+    __syscall_body(ABI_ID_READ_ASYNC);
+}
+uint8_t __attribute__((naked)) k_run_callback()
+{
+    __syscall_body(ABI_ID_RUN_CALLBACK);
+}
+void __attribute__((naked)) k_wait_callback()
+{
+    __syscall_body(ABI_ID_WAIT_CALLBACK);
 }

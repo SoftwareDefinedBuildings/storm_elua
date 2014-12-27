@@ -34,17 +34,7 @@ static _ssize_t std_read( struct _reent *r, int fd, void* vptr, size_t len, void
         return -1;
     }
 
-    while(got < len)
-    {
-        tmp = k_read(fd, &vptr[got], len - got);
-        if (tmp >= 0) {
-            got += tmp;
-        } else {
-            return tmp;
-        }
-        if (tmp == 0 && got > 0) break;
-    }
-    return got;
+    return k_read(fd, ptr, len);
 
     #if 0
   int i, c;
