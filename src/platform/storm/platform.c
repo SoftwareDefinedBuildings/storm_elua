@@ -21,7 +21,7 @@
 // Platform initialization
 void ssend(int fd, char c)
 {
-    k_write(fd, &c, 1);
+    k_write(fd, (uint8_t *)&c, 1);
 }
 int srecv(timer_data_type to)
 {
@@ -122,10 +122,8 @@ int platform_s_uart_recv( unsigned id, timer_data_type timeout )
     unsigned int rrv;
     while (1)
     {
-        printf("!",rrv);
         rrv = k_read(0, &rv, 1);
         if (rrv != 0) {
-            printf("(%d)",rrv);
             return rv;
         }
         if (timeout != PLATFORM_TIMER_INF_TIMEOUT)

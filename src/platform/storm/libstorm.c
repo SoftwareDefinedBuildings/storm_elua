@@ -7,10 +7,27 @@
 #include "platform_conf.h"
 #include "auxmods.h"
 #include <string.h>
+#include <stdint.h>
+#include <interface.h>
 
 #if LUA_OPTIMIZE_MEMORY == 0
 #error libstorm can only be compiled with LTR on (optram=true)
 #endif
+
+//Some driver specific syscalls
+int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_u32(uint32_t id, uint32_t arg0, uint32_t arg1)
+{
+    __syscall_body(ABI_ID_SYSCALL_EX);
+}
+int32_t __attribute__((naked)) k_syscall_ex_ri32_u32(uint32_t id, uint32_t arg0)
+{
+    __syscall_body(ABI_ID_SYSCALL_EX);
+}
+
+#define simplegpio_set_mode(dir,pinspec) k_syscall_ex_ri32_u32_u32(0x101,(dir),(pinspec))
+#define simplegpio_set(value,pinspec) k_syscall_ex_ri32_u32_u32(0x102,(value),(pinspec))
+#define simplegpio_get(pinspec) k_syscall_ex_ri32_u32(0x103,(pinspec))
+#define simplegpio_set_pull(dir,pinspec) k_syscall_ex_ri32_u32_u32(0x104, (dir),(pinspec))
 
 static const u16 pinspec_map [] =
 {
@@ -41,6 +58,7 @@ static int libstorm_io_get( lua_State *L )
 {
     unsigned i;
     int pinspec;
+    int rv;
     unsigned tos = lua_gettop(L);
     for( i = 1; i <= tos; i ++ )
     {
@@ -48,7 +66,8 @@ static int libstorm_io_get( lua_State *L )
         if (pinspec < 0 || pinspec > 19)
           return luaL_error( L, "invalid IO pin");
 
-        lua_pushnumber(L, i);
+        rv = simplegpio_get(pinspec_map[pinspec]);
+        lua_pushnumber(L, rv);
     }
     return tos;
 }
@@ -59,6 +78,7 @@ static int libstorm_io_set( lua_State *L )
     int value;
     unsigned i;
     int pinspec;
+    int rv;
     value = ( u32 )luaL_checkinteger( L, 1 );
     if (value > 1)
      return luaL_error( L, "invalid value");
@@ -69,7 +89,12 @@ static int libstorm_io_set( lua_State *L )
     if (pinspec < 0 || pinspec > 19)
       return luaL_error( L, "invalid IO pin");
 
-    printf("[L] Would set pin %02x to value=%d\n",pinspec_map[pinspec], value);
+    rv = simplegpio_set(value, pinspec_map[pinspec]);
+    if (rv != 0)
+    {
+        return luaL_error( L, "kernel error");
+    }
+
     }
     return 0;
 }
@@ -78,10 +103,9 @@ static int libstorm_io_set( lua_State *L )
 static int libstorm_io_set_mode( lua_State *L )
 {
     int pinspec;
-    u32 base, dir;
-    u8 pins;
+    u32 dir;
     unsigned i;
-
+    int rv;
     dir = ( u32 )luaL_checkinteger( L, 1 );
     if (dir > 2)
         return luaL_error( L, "invalid direction");
@@ -91,8 +115,36 @@ static int libstorm_io_set_mode( lua_State *L )
         pinspec = luaL_checkint( L, i );
         if (pinspec < 0 || pinspec > 19)
             return luaL_error( L, "invalid IO pin");
+        rv = simplegpio_set_mode(dir, pinspec_map[pinspec]);
+        if (rv != 0)
+        {
+            return luaL_error( L, "kernel error");
+        }
+    }
+    return 0;
+}
 
-        printf("[L] Would set pin %02x to dir=%lu\n",pinspec_map[pinspec], dir);
+// Lua: storm.io.set_pull( pullmode, pin1, pin2, ..., pinn )
+static int libstorm_io_set_pull( lua_State *L )
+{
+    int pinspec;
+    u32 dir;
+    unsigned i;
+    int rv;
+    dir = ( u32 )luaL_checkinteger( L, 1 );
+    if (dir > 3)
+        return luaL_error( L, "invalid pullmode");
+
+    for( i = 2; i <= lua_gettop( L ); i ++ )
+    {
+        pinspec = luaL_checkint( L, i );
+        if (pinspec < 0 || pinspec > 19)
+            return luaL_error( L, "invalid IO pin");
+        rv = simplegpio_set_pull(dir, pinspec_map[pinspec]);
+        if (rv != 0)
+        {
+            return luaL_error( L, "kernel error");
+        }
     }
     return 0;
 }
@@ -105,6 +157,7 @@ const LUA_REG_TYPE libstorm_io_map[] =
     { LSTRKEY( "set_mode" ), LFUNCVAL ( libstorm_io_set_mode ) },
     { LSTRKEY( "set" ),  LFUNCVAL ( libstorm_io_set ) },
     { LSTRKEY( "get" ), LFUNCVAL ( libstorm_io_get ) },
+    { LSTRKEY( "set_pull" ), LFUNCVAL ( libstorm_io_set_pull ) },
     { LSTRKEY( "D0" ), LNUMVAL ( 0 ) },
     { LSTRKEY( "D1" ), LNUMVAL ( 1 ) },
     { LSTRKEY( "D2" ), LNUMVAL ( 2 ) },
@@ -130,6 +183,10 @@ const LUA_REG_TYPE libstorm_io_map[] =
     { LSTRKEY( "PERIPHERAL" ), LNUMVAL(2) },
     { LSTRKEY( "LOW" ), LNUMVAL(0) },
     { LSTRKEY( "HIGH" ), LNUMVAL(1) },
+    { LSTRKEY( "PULL_NONE" ), LNUMVAL(0) },
+    { LSTRKEY( "PULL_UP" ), LNUMVAL(1) },
+    { LSTRKEY( "PULL_DOWN" ), LNUMVAL(2) },
+    { LSTRKEY( "PULL_KEEP" ), LNUMVAL(3) },
     { LNILKEY, LNILVAL }
 };
 /*

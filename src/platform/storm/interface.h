@@ -118,5 +118,12 @@ uint8_t k_run_callback();
 void k_wait_callback();
 #define ABI_ID_WAIT_CALLBACK 7
 
+/**
+ *
+ * Execute a driver extended syscall. Alternate signatures can be defined arbitrarily,
+ * the body remains the same
+ */
+void k_syscall_ex(uint32_t number, uint32_t arg0, uint32_t arg1, uint32_t arg2);
+#define ABI_ID_SYSCALL_EX 8
 
 #endif

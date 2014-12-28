@@ -18,8 +18,6 @@ int std_prev_char = -1;
 // 'read'
 static _ssize_t std_read( struct _reent *r, int fd, void* vptr, size_t len, void *pdata )
 {
-    uint32_t got = 0;
-    uint32_t tmp;
     char* ptr = ( char* )vptr;
 
     // Check file number
@@ -34,7 +32,7 @@ static _ssize_t std_read( struct _reent *r, int fd, void* vptr, size_t len, void
         return -1;
     }
 
-    return k_read(fd, ptr, len);
+    return k_read(fd, (uint8_t*)ptr, len);
 
     #if 0
   int i, c;
@@ -108,10 +106,7 @@ static _ssize_t std_read( struct _reent *r, int fd, void* vptr, size_t len, void
 
 // 'write'
 static _ssize_t std_write( struct _reent *r, int fd, const void* vptr, size_t len, void *pdata )
-{   
-  int i;
-  const char* ptr = ( const char* )vptr;
-
+{
   // Check file number
   if( ( fd < DM_STDIN_NUM ) || ( fd > DM_STDERR_NUM ) )
   {
@@ -124,7 +119,7 @@ static _ssize_t std_write( struct _reent *r, int fd, const void* vptr, size_t le
     return -1;
   }  
   
-  k_write(fd, vptr, len);
+  k_write(fd, (uint8_t*)vptr, len);
   return len;
 }
 
