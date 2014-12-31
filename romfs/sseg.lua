@@ -18,4 +18,4 @@ sseg = function ()
         storm.io.set_mode(storm.io.OUTPUT, clk, dat)
     end
 
-end () --module
+end  --module

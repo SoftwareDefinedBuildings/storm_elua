@@ -17,7 +17,8 @@ end
 -- Return an array of all the available platform modules for the given cpu
 function get_platform_modules( board, cpu )
   m = {
-      io = { lib='"io"', map = "libstorm_io_map", open = false }
+      io = { lib='"io"', map = "libstorm_io_map", open = false },
+      os = { lib='"os"', map = "libstorm_os_map", open = false }
   }
   return m
 end

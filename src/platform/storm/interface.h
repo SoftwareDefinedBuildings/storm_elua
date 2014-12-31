@@ -29,6 +29,10 @@ typedef void (*cb_u32_t) (void *r, uint32_t);
  */
 typedef void (*cb_i32_t) (void *r, int32_t);
 
+/**
+ * Callback signature for a void function taking a no arguments
+ */
+typedef void (*cb_t) (void *r);
 
 /**
  * Get the version of the kernel on the system.
