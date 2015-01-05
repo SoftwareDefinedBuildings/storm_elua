@@ -204,7 +204,7 @@ static int luaB_collectgarbage (lua_State *L) {
   switch (optsnum[o]) {
     case LUA_GCCOUNT: {
       int b = lua_gc(L, LUA_GCCOUNTB, 0);
-      lua_pushnumber(L, res + ((lua_Number)b/1024));
+      lua_pushnumber(L, res + ((lua_Number)b));
       return 1;
     }
     case LUA_GCSTEP: {

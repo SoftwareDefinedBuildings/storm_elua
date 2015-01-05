@@ -15,6 +15,9 @@
 #error libstorm can only be compiled with LTR on (optram=true)
 #endif
 
+#ifndef LUA_NUMBER_INTEGRAL
+#error need integral
+#endif
 int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_u32(uint32_t id, uint32_t arg0, uint32_t arg1)
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
