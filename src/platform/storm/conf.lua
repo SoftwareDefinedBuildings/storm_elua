@@ -2,7 +2,7 @@
 
 local cpumode = ( builder:get_option( 'cpumode' ) or 'arm' ):lower()
 
-specific_files = "platform.c interface.c libstorm.c"
+specific_files = "platform.c interface.c libstorm.c libmsgpack.c"
 
 local ldscript = "kernelpayload.ld"
   
