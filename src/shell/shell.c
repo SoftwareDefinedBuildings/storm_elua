@@ -198,18 +198,18 @@ static const SHELL_COMMAND shell_commands[] =
 {
   { "help", shell_help },
   { "lua", shell_lua },
-  { "recv", shell_recv },
-  { "ver", shell_ver },
+ // { "recv", shell_recv },
+//  { "ver", shell_ver },
   { "exit", NULL },
   { "ls", shell_ls },
-  { "dir", shell_ls },
+ // { "dir", shell_ls },
   { "cat", shell_cat },
-  { "type", shell_cat },
-  { "cp", shell_cp },
-  { "wofmt", shell_wofmt },
-  { "mkdir", shell_mkdir },
-  { "rm", shell_adv_rm },
-  { "mv", shell_adv_mv },
+//  { "type", shell_cat },
+//  { "cp", shell_cp },
+ // { "wofmt", shell_wofmt },
+//  { "mkdir", shell_mkdir },
+ // { "rm", shell_adv_rm },
+ // { "mv", shell_adv_mv },
   { NULL, NULL }
 };
 
@@ -365,7 +365,7 @@ void shell_start( void )
   int i;
 #endif
 
-  printf( SHELL_WELCOMEMSG, ELUA_STR_VERSION );
+  printf( SHELL_WELCOMEMSG );
   while( 1 )
   {
     while( linenoise_getline( LINENOISE_ID_SHELL, cmd, SHELL_MAXSIZE - 1, SHELL_PROMPT ) == -1 )

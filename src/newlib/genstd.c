@@ -119,7 +119,7 @@ static _ssize_t std_write( struct _reent *r, int fd, const void* vptr, size_t le
     return -1;
   }  
   
-  k_write(fd, (uint8_t*)vptr, len);
+  k_write(1, (uint8_t*)vptr, len);
   return len;
 }
 

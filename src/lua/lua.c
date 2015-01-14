@@ -57,9 +57,9 @@ static void print_usage (void) {
 
 
 static void l_message (const char *pname, const char *msg) {
-  if (pname) fprintf(stderr, "%s: ", pname);
-  fprintf(stderr, "%s\n", msg);
-  fflush(stderr);
+  if (pname) fprintf(stdout, "%s: ", pname);
+  fprintf(stdout, "%s\n", msg);
+  fflush(stdout);
 }
 
 
