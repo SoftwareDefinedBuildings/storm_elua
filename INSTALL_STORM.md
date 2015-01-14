@@ -11,7 +11,7 @@ The purpose of this document is to get a Lua shell running on a Storm mote. You 
 Inside the `stormport` repository, find the Kernel application at
 `stormport/apps/Kernel`. To limit the number of items that print out on your
 screen and obfuscate the output you care about, open up the Makefile and make
-sure you have the following 3 lines commented/uncommented:
+sure you have the following 2 lines commented/uncommented:
 
 ```make
 PFLAGS += -DBLIP_STFU
@@ -75,3 +75,5 @@ You are now in a Lua shell
 Lua 5.1.4  Copyright (C) 1994-2011 Lua.org, PUC-Rio
 > 
 ```
+
+Note: do not worry about the error `attempt to call global 'x' (a number value) -- it means nothing other than indicating stack traces work
