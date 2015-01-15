@@ -53,6 +53,7 @@ cord.enter_loop = function ()
                 end
             end
         end
+        storm.os.kyield()
         if ranone then
             storm.os.run_callback()
         else

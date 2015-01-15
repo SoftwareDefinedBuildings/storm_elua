@@ -19,7 +19,8 @@ function get_platform_modules( board, cpu )
   m = {
       io = { lib='"io"', map = "libstorm_io_map", open = false },
       os = { lib='"os"', map = "libstorm_os_map", open = false },
-      mp = { lib='"mp"', map = "libmsgpack_mp_map", open = false }
+      mp = { lib='"mp"', map = "libmsgpack_mp_map", open = false },
+      net = { lib='"net"', map = "libstorm_net_map", open = false },
   }
   return m
 end

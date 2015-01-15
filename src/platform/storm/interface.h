@@ -34,6 +34,8 @@ typedef void (*cb_i32_t) (void *r, int32_t);
  */
 typedef void (*cb_t) (void *r);
 
+typedef void (*cb_cpt_u32_cptr_t) (void *r, char*, uint32_t, char*);
+
 /**
  * Get the version of the kernel on the system.
  *

@@ -34,6 +34,22 @@ uint32_t __attribute__((naked)) k_syscall_ex_ru32(uint32_t id)
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
 }
+int32_t __attribute__((naked)) k_syscall_ex_ri32(uint32_t id)
+{
+    __syscall_body(ABI_ID_SYSCALL_EX);
+}
+int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_vptr_u32_cptr_cb_vptr(uint32_t id, uint32_t arg0, void *arg1, uint32_t arg2, char* arg3, cb_t cb, void *r)
+{
+    __syscall_body(ABI_ID_SYSCALL_EX);
+}
+int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_cb_vptr(uint32_t id, uint32_t arg0, void *cb, void *r)
+{
+    __syscall_body(ABI_ID_SYSCALL_EX);
+}
+int32_t __attribute__((naked)) k_syscall_ex_ri32_cptr_u32_cptr_u32(uint32_t id, uint32_t arg0, char* arg1, uint32_t arg2, char* arg3, uint32_t arg4)
+{
+    __syscall_body(ABI_ID_SYSCALL_EX);
+}
 
 //Some driver specific syscalls
 //--------- GPIO
@@ -48,6 +64,14 @@ uint32_t __attribute__((naked)) k_syscall_ex_ru32(uint32_t id)
 #define timer_getnow_s16() k_syscall_ex_ru32(0x203)
 #define timer_getnow_s48() k_syscall_ex_ru32(0x204)
 #define timer_cancel(id) k_syscall_ex_ri32_u32(0x205, (id))
+
+//---------- UDP
+#define udp_socket() k_syscall_ex_ri32(0x301)
+#define udp_bind(sockid,port) k_syscall_ex_ri32_u32_u32(0x302, (sockid), (port))
+#define udp_close(sockid) k_syscall_ex_ri32_u32(0x303, (sockid))
+#define udp_sendto(sockid, buffer, bufferlen, addr, port) k_syscall_ex_ri32_cptr_u32_cptr_u32(0x304, (sockid), (buffer), (bufferlen), (addr), (port))
+#define udp_set_recvfrom(sockid, cb, r) k_syscall_ex_ri32_u32_cb_vptr(0x305, (sockid), (cb), (r))
+//#define udp_unset_recvfrom(sockid) k_syscall_ex_ri32_u32(0x306, (sockid))
 
 static lua_State *_cb_L;
 static const u16 pinspec_map [] =
@@ -186,7 +210,7 @@ static int libstorm_os_cancel( lua_State *L )
     const uint32_t *context;
     if (lua_gettop( L ) != 1)
         return luaL_error( L, "cancel takes a single timer pointer");
-    context = lua_topointer(L, 1);
+    context = lua_touserdata(L, 1);
     timer_cancel(context[context[0]+2]);
     libstorm_tmr_free_context(L, (void*) context);
     lua_pop(L, 1);
@@ -235,7 +259,7 @@ static void libstorm_tmr_oneshot_callback(void* ctx)
     uint32_t *context = ctx;
     uint32_t i;
     int rv;
-    char* msg;
+    const char* msg;
     lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, context[1]);
     for (i=0;i<context[0];i++)
     {
@@ -320,6 +344,118 @@ static int libstorm_os_kyield(lua_State *L)
     return 0;
 }
 
+typedef struct
+{
+    int recv_cb_ref;
+    uint16_t sockid;
+    uint16_t _;
+} __attribute__((packed)) storm_socket_t;
+typedef struct
+{
+    uint32_t reserved1;
+    uint32_t reserved2;
+    uint8_t* buffer;
+    uint32_t buflen;
+    uint8_t src_address [16];
+    uint32_t port;
+} udp_recv_params_t;
+//lua callback signature recv(data, address, port)
+static void libstorm_net_recv_cb(void* sock_ptr, udp_recv_params_t *params, char* addr)
+{
+    storm_socket_t *sock = sock_ptr;
+    int rv;
+    const char* msg;
+    if (sock->recv_cb_ref == 0) return;
+    lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, sock->recv_cb_ref);
+    lua_pushlstring(_cb_L, params->buffer, params->buflen);
+    lua_pushstring(_cb_L, addr); //addr is in p form
+    lua_pushnumber(_cb_L, params->port);
+    if ((rv = lua_pcall(_cb_L, 3, 0, 0)) != 0)
+    {
+        printf("[ERROR] could not run callback %d\n", rv);
+        msg = luaL_checkstring(_cb_L, -1);
+        printf("msg: %s\n", msg);
+    }
+}
+
+// Lua: storm.net.bind(port, recv_callback)
+static int libstorm_net_bind(lua_State *L)
+{
+    storm_socket_t *sock;
+    int32_t rv;
+    int32_t socknum;
+    uint16_t port;
+    if (lua_gettop(L) != 2)
+    {
+        return luaL_error( L, "expected (port, recv_callback)");
+    }
+    port = (uint16_t) luaL_checkinteger(L, 1);
+    socknum = udp_socket();
+    if (socknum == -1)
+    {
+        return luaL_error( L, "ran out of sock FD's");
+    }
+    sock = (storm_socket_t*) malloc(sizeof(storm_socket_t));
+    if (!sock)
+    {
+        return luaL_error( L, "out of memory");
+    }
+    sock->sockid = (uint16_t) socknum;
+    //--
+    //call kernel bind(socknum, port)
+    rv = udp_bind(socknum, port);
+    if (rv != 0)
+    {
+        free(sock);
+        return luaL_error( L, "could not bind socket");
+    }
+    sock->recv_cb_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    //Also tell kernel to bind callback
+    udp_set_recvfrom(socknum, libstorm_net_recv_cb, sock);
+    lua_pushlightuserdata ( L, sock);
+    return 1;
+}
+// Lua: storm.net.close(socket_handle)
+static int libstorm_net_close(lua_State *L)
+{
+    //First free the callback
+    storm_socket_t *sock;
+    sock = lua_touserdata(L, 1);
+    if (!sock)
+    {
+        return luaL_error(L, "expected (sock)");
+    }
+    luaL_unref(L, LUA_REGISTRYINDEX, sock->recv_cb_ref);
+    //tell kernel to free socket
+    udp_close(sock->sockid);
+    free(sock);
+    return 0;
+}
+// Lua: storm.net.sendto(socket_handle, buffer, addrstr, port)
+static int libstorm_net_sendto(lua_State *L)
+{
+    storm_socket_t *sock;
+    int32_t rv;
+    char* buffer;
+    uint32_t buflen;
+    char* addrstr;
+    uint32_t port;
+    char *errparam = "expected (sock, buffer, addrstr, port)";
+    if (lua_gettop(L) != 4) return luaL_error(L, errparam);
+    sock = lua_touserdata(L, 1);
+    if (!sock) return luaL_error(L, errparam);
+    buffer = luaL_checklstring(L, 2, &buflen);
+    addrstr = luaL_checkstring(L, 3);
+    port = luaL_checknumber(L,4);
+    if (port > 65535 || port == 0) return luaL_error(L, errparam);
+    rv = udp_sendto(sock->sockid, buffer, buflen, addrstr, port);
+    if (rv == 0) lua_pushnumber(L, 1);
+    else lua_pushnumber(L, 0);
+    return 1;
+    //call kernel sendto(socknum, buffer, bufferlen, toaddrstr(nulterm), function_on_complete(linkresult))
+}
+
+
 // Module function map
 #define MIN_OPT_LEVEL 2
 #include "lrodefs.h" 
@@ -376,6 +512,15 @@ const LUA_REG_TYPE libstorm_os_map[] =
     { LSTRKEY( "SECOND" ), LNUMVAL ( 187500 ) },
     { LSTRKEY( "MINUTE" ), LNUMVAL ( 11250000 ) },
     { LSTRKEY( "HOUR" ), LNUMVAL ( 675000000 ) },
+    { LNILKEY, LNILVAL }
+};
+const LUA_REG_TYPE libstorm_net_map[] =
+{
+    { LSTRKEY( "bind" ),  LFUNCVAL ( libstorm_net_bind ) },
+    { LSTRKEY( "close" ), LFUNCVAL ( libstorm_net_close ) },
+    { LSTRKEY( "sendto" ), LFUNCVAL ( libstorm_net_sendto ) },
+ //   { LSTRKEY( "set_recvfrom" ), LFUNCVAL ( libstorm_net_recvfrom ) },
+ //   { LSTRKEY( "unset_recvfrom" ), LFUNCVAL ( libstorm_net_recvfrom ) },
     { LNILKEY, LNILVAL }
 };
 /*

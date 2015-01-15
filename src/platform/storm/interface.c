@@ -99,8 +99,6 @@ void __attribute__(( naked , used )) _start()
 /* This function is not intended to return! */
 void __attribute__((used)) _start2()
 {
-    uint8_t* ptr;
-
     //asm volatile(" LDR sp, =_estack");
     uint32_t *pSrc, *pDest;
 

@@ -29,7 +29,6 @@ const char shell_help_summary_lua[] = "start a Lua session";
 
 void shell_lua( int argc, char **argv )
 {
-  printf( "You are now in a Lua shell\n" );
   lua_main( argc, argv );
   clearerr( stdin );
 }
