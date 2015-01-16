@@ -26,10 +26,15 @@ cord.await = function(f, ...)
     cord._cors[cord._activeidx].rv=nil
     local aidx = cord._activeidx
 
-    f(..., function (...)
+    local argf = function (...)
         cord._cors[aidx].s=cord._PROMISEDONE
         cord._cors[aidx].rv={...}
-        end, cord._activeidx)--]]
+    end
+    if (... == nil) then
+        f(argf)
+    else
+        f(..., argf)
+    end
     return coroutine.yield()
 end
 

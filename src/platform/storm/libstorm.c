@@ -46,7 +46,7 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_cb_vptr(uint32_t id, uint32
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
 }
-int32_t __attribute__((naked)) k_syscall_ex_ri32_cptr_u32_cptr_u32(uint32_t id, uint32_t arg0, char* arg1, uint32_t arg2, char* arg3, uint32_t arg4)
+int32_t __attribute__((naked)) k_syscall_ex_ri32_cptr_u32_cptr_u32(uint32_t id, uint32_t arg0, const char* arg1, uint32_t arg2, const char* arg3, uint32_t arg4)
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
 }
@@ -367,7 +367,7 @@ static void libstorm_net_recv_cb(void* sock_ptr, udp_recv_params_t *params, char
     const char* msg;
     if (sock->recv_cb_ref == 0) return;
     lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, sock->recv_cb_ref);
-    lua_pushlstring(_cb_L, params->buffer, params->buflen);
+    lua_pushlstring(_cb_L, (char*)params->buffer, params->buflen);
     lua_pushstring(_cb_L, addr); //addr is in p form
     lua_pushnumber(_cb_L, params->port);
     if ((rv = lua_pcall(_cb_L, 3, 0, 0)) != 0)
@@ -436,9 +436,9 @@ static int libstorm_net_sendto(lua_State *L)
 {
     storm_socket_t *sock;
     int32_t rv;
-    char* buffer;
-    uint32_t buflen;
-    char* addrstr;
+    const char* buffer;
+    size_t buflen;
+    const char* addrstr;
     uint32_t port;
     char *errparam = "expected (sock, buffer, addrstr, port)";
     if (lua_gettop(L) != 4) return luaL_error(L, errparam);
@@ -455,7 +455,157 @@ static int libstorm_net_sendto(lua_State *L)
     //call kernel sendto(socknum, buffer, bufferlen, toaddrstr(nulterm), function_on_complete(linkresult))
 }
 
+static int traceback (lua_State *L) {
+  if (!lua_isstring(L, 1))  /* 'message' not a string? */
+    return 1;  /* keep it intact */
+  lua_getfield(L, LUA_GLOBALSINDEX, "debug");
+  if (!lua_istable(L, -1) && !lua_isrotable(L, -1)) {
+    lua_pop(L, 1);
+    return 1;
+  }
+  lua_getfield(L, -1, "traceback");
+  if (!lua_isfunction(L, -1) && !lua_islightfunction(L, -1)) {
+    lua_pop(L, 2);
+    return 1;
+  }
+  lua_pushvalue(L, 1);  /* pass error message */
+  lua_pushinteger(L, 2);  /* skip this function and traceback */
+  lua_call(L, 2, 1);  /* call debug.traceback */
+  return 1;
+}
 
+static void l_message (const char *pname, const char *msg) {
+  if (pname) fprintf(stdout, "%s: ", pname);
+  fprintf(stdout, "%s\n", msg);
+  fflush(stdout);
+}
+
+static int docall (lua_State *L, int narg, int clear) {
+  int status;
+  int base = lua_gettop(L) - narg;  /* function index */
+  lua_pushcfunction(L, traceback);  /* push traceback function */
+  lua_insert(L, base);  /* put it under chunk and args */
+  status = lua_pcall(L, narg, (clear ? 0 : LUA_MULTRET), base);
+  lua_remove(L, base);  /* remove traceback function */
+  /* force a complete garbage collection in case of errors */
+  if (status != 0) lua_gc(L, LUA_GCCOLLECT, 0);
+  return status;
+}
+
+static int incomplete (lua_State *L, int status) {
+  if (status == LUA_ERRSYNTAX) {
+    size_t lmsg;
+    const char *msg = lua_tolstring(L, -1, &lmsg);
+    const char *tp = msg + lmsg - (sizeof(LUA_QL("<eof>")) - 1);
+    if (strstr(msg, LUA_QL("<eof>")) == tp) {
+      lua_pop(L, 1);
+      return 1;
+    }
+  }
+  return 0;  /* else... */
+}
+
+static int report (lua_State *L, int status) {
+  if (status && !lua_isnil(L, -1)) {
+    const char *msg = lua_tostring(L, -1);
+    if (msg == NULL) msg = "(error object is not a string)";
+    l_message("pgname", msg);
+    lua_pop(L, 1);
+  }
+  return status;
+}
+
+//lua : storm.os.procline(line)
+static int libstorm_os_procline(lua_State *L) {
+  int status;
+  if (lua_gettop(L) != 1)
+  {
+    return luaL_error(L, "expected (line)");
+  }
+  //load the buffered text
+  lua_pushstring(L, "clibuf");
+  lua_gettable(L, LUA_REGISTRYINDEX);
+  if(lua_isnil(L, -1))
+  {
+    lua_pop(L, 1);
+    lua_pushstring(L, "");
+  }
+  lua_insert(L, 1);
+  //1 == prev buffer
+  //2 == new part
+  lua_concat(L, 2);
+  status = luaL_loadbuffer(L, lua_tostring(L, 1), lua_strlen(L, 1), "=stdin");
+  if (incomplete(L, status))
+  {
+    lua_pop(L, 1); //push off chunk
+    lua_pushstring(L, "clibuf");
+    lua_insert(L, -2); //put it below buffer string
+    //clibuf
+    //string
+    lua_settable(L, LUA_REGISTRYINDEX);
+    return 0;
+  }
+  lua_remove(L, 1);
+  //zero out buffer, we have complete chunk
+  lua_pushstring(L, "clibuf");
+  lua_pushstring(L, "");
+  lua_settable(L, LUA_REGISTRYINDEX);
+  //TOS is chunk
+  if (status != 0)
+  {
+    return luaL_error(L, "nz status");
+  }
+  status = docall(L, 0, 0);
+  report(L, status);
+  if (status == 0 && lua_gettop(L) > 0) {  /* any result to print? */
+      lua_getglobal(L, "print");
+      lua_insert(L, 1);
+      if (lua_pcall(L, lua_gettop(L)-1, 0, 0) != 0)
+        l_message("prg", lua_pushfstring(L,
+                               "error calling " LUA_QL("print") " (%s)",
+                               lua_tostring(L, -1)));
+  }
+  lua_settop(L, 0);  /* clear stack */
+  fputs("\n", stdout);
+  fflush(stdout);
+  return 0;
+}
+
+char stdin_buffer[128];
+
+static void libstorm_os_read_stdin_callback(void* r, int32_t v)
+{
+    int cbindex = (int) r;
+    int rv;
+    const char *msg;
+    lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, cbindex);
+    lua_pushlstring(_cb_L, stdin_buffer, v);
+    if ((rv = lua_pcall(_cb_L, 1, 0, 0)) != 0)
+    {
+        printf("[ERROR] could not run callback %d\n", rv);
+        msg = luaL_checkstring(_cb_L, -1);
+        printf("msg: %s\n", msg);
+    }
+    luaL_unref(_cb_L, LUA_REGISTRYINDEX, cbindex);
+}
+//lua: storm.os.read_stdin(func(txt))
+static int libstorm_os_read_stdin(lua_State *L) {
+    int cbindex;
+    //luaL_checkfunction(L, 1);
+    cbindex = luaL_ref(L, LUA_REGISTRYINDEX);
+    k_read_async(0, (uint8_t*)stdin_buffer, 128, libstorm_os_read_stdin_callback, (void*)cbindex);
+    return 0;
+}
+
+extern uint32_t _ebss;
+static int libstorm_os_freeram(lua_State *L) {
+    uint32_t freeram;
+    freeram = (uint32_t)&freeram - (uint32_t)(&_ebss);
+    printf("fr %d\n",(uint32_t)&freeram);
+    printf("eb %d\n",(uint32_t)&_ebss);
+    lua_pushnumber(L, freeram);
+    return 1;
+}
 // Module function map
 #define MIN_OPT_LEVEL 2
 #include "lrodefs.h" 
@@ -505,6 +655,9 @@ const LUA_REG_TYPE libstorm_os_map[] =
     { LSTRKEY( "run_callback" ), LFUNCVAL ( libstorm_os_run_callback ) },
     { LSTRKEY( "wait_callback" ), LFUNCVAL ( libstorm_os_wait_callback ) },
     { LSTRKEY( "kyield" ), LFUNCVAL ( libstorm_os_kyield ) },
+    { LSTRKEY( "procline"), LFUNCVAL ( libstorm_os_procline) },
+    { LSTRKEY( "read_stdin"), LFUNCVAL ( libstorm_os_read_stdin) },
+    { LSTRKEY( "freeram"), LFUNCVAL ( libstorm_os_freeram) },
     { LSTRKEY( "SHIFT_0" ), LNUMVAL ( 1 ) },
     { LSTRKEY( "SHIFT_16" ), LNUMVAL ( 2 ) },
     { LSTRKEY( "SHIFT_48" ), LNUMVAL ( 3 ) },
