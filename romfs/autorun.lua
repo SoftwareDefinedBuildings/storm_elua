@@ -6,7 +6,7 @@ require("mpdb") -- msgpack database
 
 sock = storm.net.bind(101, function(payload, from, port)
     print ("Got a message from ",from, " port ",port)
-    print ("Payload: ", payload)
+    print ("Payload: ", storm.mp.unpack(payload))
 end)
 
 
@@ -21,14 +21,14 @@ storm.os.invokePeriodically(5*storm.os.SECOND, function()
         value = "here's a value",
         count = count
     }
-    mpdb.insert(packet)
     count = count + 1
     if count % 4 == 0 then
-        print (" oh")
         query = {
            count = 40
         }
         mpdb.query(query)
+    else
+        mpdb.insert(packet)
     end
 end)
 
