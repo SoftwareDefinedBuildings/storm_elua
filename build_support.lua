@@ -13,14 +13,14 @@ function go_build()
             print ("could not load autorun file")
             return
         end
-        lfs.link("toolchains/storm_elua/romfs/autorun.lua", autorun)
+        lfs.link(string.format("%s/%s",lfs.currentdir(),autorun), "toolchains/storm_elua/romfs/autorun.lua", true)
     end
     for k,v in pairs(libs) do
         if lfs.attributes(v) == nil then
             print (string.format("could not load library '%s'",k))
             return
         end
-        lfs.link(string.format("toolchains/storm_elua/romfs/%s.lua",k),v)
+        lfs.link(string.format("%s/%s",lfs.currentdir(),v),string.format("toolchains/storm_elua/romfs/%s.lua",k), true)
     end
     lfs.chdir("toolchains/storm_elua")
     os.execute("./gobuild")
