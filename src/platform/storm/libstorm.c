@@ -518,6 +518,7 @@ static int report (lua_State *L, int status) {
 //lua : storm.os.procline(line)
 static int libstorm_os_procline(lua_State *L) {
   int status;
+  printf("procline invoked\n");
   if (lua_gettop(L) != 1)
   {
     return luaL_error(L, "expected (line)");
@@ -529,22 +530,37 @@ static int libstorm_os_procline(lua_State *L) {
   {
     lua_pop(L, 1);
     lua_pushstring(L, "");
+  } else {
+    printf ("restored clibuf\n");
   }
+  printf("stacklen %d\n", lua_gettop(L));
+  printf("a %d\n", lua_isstring(L, 1));
+  printf("b %d\n", lua_isstring(L, 2));
   lua_insert(L, 1);
+  printf("did insert\n");
+  printf("a %d\n", lua_isstring(L, 1));
+  printf("b %d\n", lua_isstring(L, 2));
   //1 == prev buffer
   //2 == new part
   lua_concat(L, 2);
+  printf("did concat %d\n", lua_gettop(L));
   status = luaL_loadbuffer(L, lua_tostring(L, 1), lua_strlen(L, 1), "=stdin");
+  printf("did loadbuf st=%d\n", status);
   if (incomplete(L, status))
   {
+    printf("incomplete\n");
     lua_pop(L, 1); //push off chunk
     lua_pushstring(L, "clibuf");
     lua_insert(L, -2); //put it below buffer string
+    printf("tos %d\n", lua_gettop(L));
+    printf("a-2 %d\n", lua_isstring(L, -2));
+    printf("b-1 %d\n", lua_isstring(L, -1));
     //clibuf
     //string
     lua_settable(L, LUA_REGISTRYINDEX);
     return 0;
   }
+  printf("complete\n");
   lua_remove(L, 1);
   //zero out buffer, we have complete chunk
   lua_pushstring(L, "clibuf");
@@ -555,7 +571,9 @@ static int libstorm_os_procline(lua_State *L) {
   {
     return luaL_error(L, "nz status");
   }
+  printf("doing call\n");
   status = docall(L, 0, 0);
+  printf("status %d\n", status);
   report(L, status);
   if (status == 0 && lua_gettop(L) > 0) {  /* any result to print? */
       lua_getglobal(L, "print");
