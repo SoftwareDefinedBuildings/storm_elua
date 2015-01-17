@@ -535,7 +535,7 @@ static int incomplete (lua_State *L, int status) {
     const char *msg = lua_tolstring(L, -1, &lmsg);
     const char *tp = msg + lmsg - (sizeof(LUA_QL("<eof>")) - 1);
     if (strstr(msg, LUA_QL("<eof>")) == tp) {
-      lua_pop(L, 1);
+      //lua_pop(L, 1);
       return 1;
     }
   }
@@ -546,16 +546,16 @@ static int report (lua_State *L, int status) {
   if (status && !lua_isnil(L, -1)) {
     const char *msg = lua_tostring(L, -1);
     if (msg == NULL) msg = "(error object is not a string)";
-    l_message("pgname", msg);
+    l_message("stormshell", msg);
     lua_pop(L, 1);
   }
   return status;
 }
 
-//lua : storm.os.procline(line)
-static int libstorm_os_procline(lua_State *L) {
+//lua : storm.os.stormshell(line)
+static int libstorm_os_stormshell(lua_State *L) {
   int status;
-  printf("procline invoked\n");
+  const char* chnk;
   if (lua_gettop(L) != 1)
   {
     return luaL_error(L, "expected (line)");
@@ -567,37 +567,33 @@ static int libstorm_os_procline(lua_State *L) {
   {
     lua_pop(L, 1);
     lua_pushstring(L, "");
-  } else {
-    printf ("restored clibuf\n");
   }
-  printf("stacklen %d\n", lua_gettop(L));
-  printf("a %d\n", lua_isstring(L, 1));
-  printf("b %d\n", lua_isstring(L, 2));
   lua_insert(L, 1);
-  printf("did insert\n");
-  printf("a %d\n", lua_isstring(L, 1));
-  printf("b %d\n", lua_isstring(L, 2));
   //1 == prev buffer
   //2 == new part
   lua_concat(L, 2);
-  printf("did concat %d\n", lua_gettop(L));
-  status = luaL_loadbuffer(L, lua_tostring(L, 1), lua_strlen(L, 1), "=stdin");
-  printf("did loadbuf st=%d\n", status);
-  if (incomplete(L, status))
+  //If the chunk does not end with a newline, then wait
+  chnk = lua_tostring(L, 1);
+  if (chnk[lua_strlen(L, 1)-1] != '\n')
   {
-    printf("incomplete\n");
-    lua_pop(L, 1); //push off chunk
     lua_pushstring(L, "clibuf");
-    lua_insert(L, -2); //put it below buffer string
-    printf("tos %d\n", lua_gettop(L));
-    printf("a-2 %d\n", lua_isstring(L, -2));
-    printf("b-1 %d\n", lua_isstring(L, -1));
+    lua_insert(L, 1); //put it below buffer string
     //clibuf
     //string
     lua_settable(L, LUA_REGISTRYINDEX);
     return 0;
   }
-  printf("complete\n");
+  status = luaL_loadbuffer(L, lua_tostring(L, 1), lua_strlen(L, 1), "=stdin");
+  if (incomplete(L, status))
+  {
+    lua_pop(L, 1); //push off chunk/error_message
+    lua_pushstring(L, "clibuf");
+    lua_insert(L, 1); //put it below buffer string
+    //clibuf
+    //string
+    lua_settable(L, LUA_REGISTRYINDEX);
+    return 0;
+  }
   lua_remove(L, 1);
   //zero out buffer, we have complete chunk
   lua_pushstring(L, "clibuf");
@@ -606,22 +602,22 @@ static int libstorm_os_procline(lua_State *L) {
   //TOS is chunk
   if (status != 0)
   {
-    return luaL_error(L, "nz status");
+    report(L, status);
+    fputs("\033[34;1mstormsh> \033[0m", stdout);
+    return 0;
   }
-  printf("doing call\n");
   status = docall(L, 0, 0);
-  printf("status %d\n", status);
   report(L, status);
   if (status == 0 && lua_gettop(L) > 0) {  /* any result to print? */
       lua_getglobal(L, "print");
       lua_insert(L, 1);
       if (lua_pcall(L, lua_gettop(L)-1, 0, 0) != 0)
-        l_message("prg", lua_pushfstring(L,
+        l_message("stormshell", lua_pushfstring(L,
                                "error calling " LUA_QL("print") " (%s)",
                                lua_tostring(L, -1)));
   }
   lua_settop(L, 0);  /* clear stack */
-  fputs("\n", stdout);
+  fputs("\033[34;1mstormsh> \033[0m", stdout);
   fflush(stdout);
   return 0;
 }
@@ -725,7 +721,7 @@ static void libstorm_os_read_stdin_callback(void* r, int32_t v)
     const char *msg;
     lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, cbindex);
     lua_pushlstring(_cb_L, stdin_buffer, v);
-    if ((rv = lua_pcall(_cb_L, 0, 0, 0)) != 0)
+    if ((rv = lua_pcall(_cb_L, 1, 0, 0)) != 0)
     {
         printf("[ERROR] could not run stdin callback (%d)\n", rv);
         msg = lua_tostring(_cb_L, -1);
@@ -806,7 +802,7 @@ const LUA_REG_TYPE libstorm_os_map[] =
     { LSTRKEY( "run_callback" ), LFUNCVAL ( libstorm_os_run_callback ) },
     { LSTRKEY( "wait_callback" ), LFUNCVAL ( libstorm_os_wait_callback ) },
     { LSTRKEY( "kyield" ), LFUNCVAL ( libstorm_os_kyield ) },
-    { LSTRKEY( "procline"), LFUNCVAL ( libstorm_os_procline) },
+    { LSTRKEY( "stormshell"), LFUNCVAL ( libstorm_os_stormshell) },
     { LSTRKEY( "read_stdin"), LFUNCVAL ( libstorm_os_read_stdin) },
     { LSTRKEY( "imageram"), LFUNCVAL ( libstorm_os_freeram) },
     { LSTRKEY( "nodeid" ), LFUNCVAL ( libstorm_os_getnodeid ) },
