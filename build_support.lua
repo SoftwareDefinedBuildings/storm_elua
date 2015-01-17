@@ -1,10 +1,27 @@
 local lfs = require "lfs"
 function go_build()
     if autoupdate == true then
-        cwd = lfs.currentdir()
+        local cwd = lfs.currentdir()
         lfs.chdir("toolchains/storm_elua")
         os.execute("rm -f romfs/*")
         os.execute("git pull")
+        lfs.chdir(cwd)
+        lfs.chdir("toolchains/stormport")
+        os.execute("git pull")
+        lfs.chdir(cwd)
+    end
+    if reflash_kernel == true then
+        local cwd = lfs.currentdir()
+        lfs.chdir("toolchains/stormport/apps/Kernel")
+        local pfx = ""
+        if kernel_opts.quiet == true then
+           pfx = pfx .. "KERNEL_QUIET_MODE=TRUE "
+        end
+        if kernel_opts.eth_shield == true then
+            pfx = pfx .. "KERNEL_WITH_ETH_SHIELD=TRUE"
+        end
+        print("executing make")
+        os.execute(string.format("%s make storm install", pfx))
         lfs.chdir(cwd)
     end
     os.execute("rm -f toolchains/storm_elua/romfs/*")
