@@ -57,6 +57,9 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_cptr_u32_cptr_u32(uint32_t id, 
 #define simplegpio_set(value,pinspec) k_syscall_ex_ri32_u32_u32(0x102,(value),(pinspec))
 #define simplegpio_get(pinspec) k_syscall_ex_ri32_u32(0x103,(pinspec))
 #define simplegpio_set_pull(dir,pinspec) k_syscall_ex_ri32_u32_u32(0x104, (dir),(pinspec))
+#define simplegpio_getp(pinspec) k_syscall_ex_ri32_u32(0x105,(pinspec))
+#define simplegpio_enable_irq(pinspec, flag, cb, r) k_syscall_ex_ri32_u32_u32_cb_vptr(0x106,(pinspec),(flag), (cb), (r))
+#define simplegpio_disable_irq(pinspec) k_syscall_ex_ri32_u32(0x107, (pinspec))
 
 //----------- TIMER
 #define timer_set(ticks,periodic, callback, r) k_syscall_ex_ri32_u32_u32_cb_vptr(0x201, (ticks), (periodic), (callback),(r))
@@ -120,6 +123,25 @@ static int libstorm_io_get( lua_State *L )
     return tos;
 }
 
+// Lua: storm.io.getd(pin1, pin2, ..., pinn )
+static int libstorm_io_getd( lua_State *L )
+{
+    unsigned i;
+    int pinspec;
+    int rv;
+    unsigned tos = lua_gettop(L);
+    for( i = 1; i <= tos; i ++ )
+    {
+        pinspec = luaL_checkint(L, i);
+        if (pinspec < 0 || pinspec > 19)
+          return luaL_error( L, "invalid IO pin");
+
+        rv = simplegpio_getp(pinspec_map[pinspec]);
+        lua_pushnumber(L, rv);
+    }
+    return tos;
+}
+
 static int libstorm_os_getnodeid( lua_State *L )
 {
     uint32_t rv;
@@ -136,7 +158,7 @@ static int libstorm_io_set( lua_State *L )
     int pinspec;
     int rv;
     value = ( u32 )luaL_checkinteger( L, 1 );
-    if (value > 1)
+    if (value > 2)
      return luaL_error( L, "invalid value");
 
     for( i = 2; i <= lua_gettop( L ); i ++ )
@@ -255,14 +277,18 @@ static void libstorm_tmr_periodic_callback(void* ctx)
 {
     uint32_t *context = ctx;
     uint32_t i;
+    const char* msg;
+    int rv;
     lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, context[1]);
     for (i=0;i<context[0];i++)
     {
         lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, context[i+2]);
     }
-    if (lua_pcall(_cb_L, context[0], 0, 0) != 0)
+    if ((rv = lua_pcall(_cb_L, context[0], 0, 0)) != 0)
     {
-        printf("[ERROR] could not run callback\n");
+        printf("[ERROR] could not run tmr.periodic callback (%d)\n", rv);
+        msg = lua_tostring(_cb_L, -1);
+        printf("[ERROR] msg: %s\n", msg);
     }
 }
 static void libstorm_tmr_oneshot_callback(void* ctx)
@@ -278,9 +304,9 @@ static void libstorm_tmr_oneshot_callback(void* ctx)
     }
     if ((rv = lua_pcall(_cb_L, context[0], 0, 0)) != 0)
     {
-        printf("[ERROR] could not run callback %d\n", rv);
-        msg = luaL_checkstring(_cb_L, -1);
-        printf("msg: %s\n", msg);
+        printf("[ERROR] could not run tmr.oneshot callback (%d)\n", rv);
+        msg = lua_tostring(_cb_L, -1);
+        printf("[ERROR] msg: %s\n", msg);
     }
     libstorm_tmr_free_context(_cb_L, context);
 }
@@ -383,9 +409,9 @@ static void libstorm_net_recv_cb(void* sock_ptr, udp_recv_params_t *params, char
     lua_pushnumber(_cb_L, params->port);
     if ((rv = lua_pcall(_cb_L, 3, 0, 0)) != 0)
     {
-        printf("[ERROR] could not run callback %d\n", rv);
-        msg = luaL_checkstring(_cb_L, -1);
-        printf("msg: %s\n", msg);
+        printf("[ERROR] could not run net.recv callback (%d)\n", rv);
+        msg = lua_tostring(_cb_L, -1);
+        printf("[ERROR] msg: %s\n", msg);
     }
 }
 
@@ -602,6 +628,96 @@ static int libstorm_os_procline(lua_State *L) {
 
 char stdin_buffer[128];
 
+typedef struct
+{
+    int cbref;
+    uint16_t pinspec;
+} io_watch_t;
+
+static void libstorm_io_watch_single_cb(void* watch_ptr)
+{
+    io_watch_t *watch = watch_ptr;
+    int rv;
+    const char* msg;
+    if (watch->cbref == 0) return;
+    lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, watch->cbref);
+    if ((rv = lua_pcall(_cb_L, 0, 0, 0)) != 0)
+    {
+        printf("[ERROR] could not run io.watch1 callback (%d)\n", rv);
+        msg = lua_tostring(_cb_L, -1);
+        printf("[ERROR] msg: %s\n", msg);
+    }
+    luaL_unref(_cb_L, LUA_REGISTRYINDEX, watch->cbref);
+    free(watch);
+}
+static void libstorm_io_watch_all_cb(void* watch_ptr)
+{
+    io_watch_t *watch = watch_ptr;
+    int rv;
+    const char* msg;
+    if (watch->cbref == 0) return;
+    lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, watch->cbref);
+    if ((rv = lua_pcall(_cb_L, 0, 0, 0)) != 0)
+    {
+        printf("[ERROR] could not run io.watchA callback (%d)\n", rv);
+        msg = lua_tostring(_cb_L, -1);
+        printf("[ERROR] msg: %s\n", msg);
+    }
+}
+// Lua: storm.io.watch_single(changetype, pin, function)
+static int libstorm_io_watch_impl(lua_State *L, int repeat)
+{
+    int pin;
+    int watchtype;
+    io_watch_t *watch;
+    if (lua_gettop(L) != 3)
+    {
+        return luaL_error(L, "expected (changetype, pin, function())");
+    }
+    watchtype = luaL_checkinteger(L, 1);
+    pin = luaL_checkinteger(L, 2);
+    if (pin < 0 || pin > 19)
+        return luaL_error( L, "invalid IO pin");
+    if (watchtype < 0 || watchtype > 2)
+        return luaL_error(L, "invalid change type");
+
+    watch = (io_watch_t*) malloc(sizeof(io_watch_t));
+    if (!watch)
+    {
+        return luaL_error( L, "out of memory");
+    }
+    watch->pinspec = pinspec_map[pin];
+    watch->cbref = luaL_ref(L, LUA_REGISTRYINDEX);
+    if (repeat)
+        simplegpio_enable_irq(pinspec_map[pin], watchtype | 4, libstorm_io_watch_all_cb, watch);
+    else
+        simplegpio_enable_irq(pinspec_map[pin], watchtype, libstorm_io_watch_single_cb, watch);
+    //--
+    lua_pushlightuserdata ( L, watch);
+    return 1;
+}
+static int libstorm_io_watch_single(lua_State *L)
+{
+    return libstorm_io_watch_impl(L, 0);
+}
+static int libstorm_io_watch_all(lua_State *L)
+{
+    return libstorm_io_watch_impl(L, 1);
+}
+static int libstorm_io_cancel_watch(lua_State *L)
+{
+    io_watch_t *watch;
+    if (lua_gettop(L) != 1)
+    {
+        return luaL_error(L, "expected (handle)");
+    }
+    watch = lua_touserdata(L, 1);
+    simplegpio_disable_irq(watch->pinspec);
+    luaL_unref(L, LUA_REGISTRYINDEX, watch->cbref);
+    free(watch);
+    return 0;
+}
+
 static void libstorm_os_read_stdin_callback(void* r, int32_t v)
 {
     int cbindex = (int) r;
@@ -609,11 +725,11 @@ static void libstorm_os_read_stdin_callback(void* r, int32_t v)
     const char *msg;
     lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, cbindex);
     lua_pushlstring(_cb_L, stdin_buffer, v);
-    if ((rv = lua_pcall(_cb_L, 1, 0, 0)) != 0)
+    if ((rv = lua_pcall(_cb_L, 0, 0, 0)) != 0)
     {
-        printf("[ERROR] could not run callback %d\n", rv);
-        msg = luaL_checkstring(_cb_L, -1);
-        printf("msg: %s\n", msg);
+        printf("[ERROR] could not run stdin callback (%d)\n", rv);
+        msg = lua_tostring(_cb_L, -1);
+        printf("[ERROR] msg: %s\n", msg);
     }
     luaL_unref(_cb_L, LUA_REGISTRYINDEX, cbindex);
 }
@@ -630,8 +746,6 @@ extern uint32_t _ebss;
 static int libstorm_os_freeram(lua_State *L) {
     uint32_t freeram;
     freeram = (uint32_t)&freeram - (uint32_t)(&_ebss);
-    printf("fr %d\n",(uint32_t)&freeram);
-    printf("eb %d\n",(uint32_t)&_ebss);
     lua_pushnumber(L, freeram);
     return 1;
 }
@@ -643,7 +757,11 @@ const LUA_REG_TYPE libstorm_io_map[] =
     { LSTRKEY( "set_mode" ), LFUNCVAL ( libstorm_io_set_mode ) },
     { LSTRKEY( "set" ),  LFUNCVAL ( libstorm_io_set ) },
     { LSTRKEY( "get" ), LFUNCVAL ( libstorm_io_get ) },
+    { LSTRKEY( "getd" ), LFUNCVAL ( libstorm_io_getd ) },
     { LSTRKEY( "set_pull" ), LFUNCVAL ( libstorm_io_set_pull ) },
+    { LSTRKEY( "watch_single" ), LFUNCVAL ( libstorm_io_watch_single ) },
+    { LSTRKEY( "watch_all" ), LFUNCVAL ( libstorm_io_watch_all ) },
+    { LSTRKEY( "cancel_watch" ), LFUNCVAL ( libstorm_io_cancel_watch ) },
     { LSTRKEY( "D0" ), LNUMVAL ( 0 ) },
     { LSTRKEY( "D1" ), LNUMVAL ( 1 ) },
     { LSTRKEY( "D2" ), LNUMVAL ( 2 ) },
@@ -669,10 +787,14 @@ const LUA_REG_TYPE libstorm_io_map[] =
     { LSTRKEY( "PERIPHERAL" ), LNUMVAL(2) },
     { LSTRKEY( "LOW" ), LNUMVAL(0) },
     { LSTRKEY( "HIGH" ), LNUMVAL(1) },
+    { LSTRKEY( "TOGGLE" ), LNUMVAL(2) },
     { LSTRKEY( "PULL_NONE" ), LNUMVAL(0) },
     { LSTRKEY( "PULL_UP" ), LNUMVAL(1) },
     { LSTRKEY( "PULL_DOWN" ), LNUMVAL(2) },
     { LSTRKEY( "PULL_KEEP" ), LNUMVAL(3) },
+    { LSTRKEY( "FALLING" ), LNUMVAL(2) },
+    { LSTRKEY( "RISING" ), LNUMVAL(1) },
+    { LSTRKEY( "CHANGE" ), LNUMVAL(0) },
     { LNILKEY, LNILVAL }
 };
 const LUA_REG_TYPE libstorm_os_map[] =
@@ -686,7 +808,7 @@ const LUA_REG_TYPE libstorm_os_map[] =
     { LSTRKEY( "kyield" ), LFUNCVAL ( libstorm_os_kyield ) },
     { LSTRKEY( "procline"), LFUNCVAL ( libstorm_os_procline) },
     { LSTRKEY( "read_stdin"), LFUNCVAL ( libstorm_os_read_stdin) },
-    { LSTRKEY( "freeram"), LFUNCVAL ( libstorm_os_freeram) },
+    { LSTRKEY( "imageram"), LFUNCVAL ( libstorm_os_freeram) },
     { LSTRKEY( "nodeid" ), LFUNCVAL ( libstorm_os_getnodeid ) },
     { LSTRKEY( "SHIFT_0" ), LNUMVAL ( 1 ) },
     { LSTRKEY( "SHIFT_16" ), LNUMVAL ( 2 ) },
@@ -699,7 +821,7 @@ const LUA_REG_TYPE libstorm_os_map[] =
 };
 const LUA_REG_TYPE libstorm_net_map[] =
 {
-    { LSTRKEY( "bind" ),  LFUNCVAL ( libstorm_net_bind ) },
+    { LSTRKEY( "udpsocket" ),  LFUNCVAL ( libstorm_net_bind ) },
     { LSTRKEY( "close" ), LFUNCVAL ( libstorm_net_close ) },
     { LSTRKEY( "sendto" ), LFUNCVAL ( libstorm_net_sendto ) },
  //   { LSTRKEY( "set_recvfrom" ), LFUNCVAL ( libstorm_net_recvfrom ) },
