@@ -32,9 +32,11 @@ Prepare your system to compile ELua. Run the following from inside the base
 directory of the `storm_elua` repository:
 
 ```bash
-sudo apt-get install -y lua5.2 luarocks
+sudo apt-get install -y lua5.1 luarocks
 sudo pip install --upgrade stormloader
-sudo luarocks install luafilesystem lpack md5
+sudo luarocks install luafilesystem
+sudo luarocks install lpack
+sudo luarocks install md5
 lua cross-lua.lua
 ```
 

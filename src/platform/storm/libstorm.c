@@ -73,6 +73,9 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_cptr_u32_cptr_u32(uint32_t id, 
 #define udp_set_recvfrom(sockid, cb, r) k_syscall_ex_ri32_u32_cb_vptr(0x305, (sockid), (cb), (r))
 //#define udp_unset_recvfrom(sockid) k_syscall_ex_ri32_u32(0x306, (sockid))
 
+//---------- SysInfo
+#define sysinfo_nodeid() k_syscall_ex_ru32(0x401)
+
 static lua_State *_cb_L;
 static const u16 pinspec_map [] =
 {
@@ -115,6 +118,14 @@ static int libstorm_io_get( lua_State *L )
         lua_pushnumber(L, rv);
     }
     return tos;
+}
+
+static int libstorm_os_getnodeid( lua_State *L )
+{
+    uint32_t rv;
+    rv = sysinfo_nodeid();
+    lua_pushnumber(L, rv);
+    return 1;
 }
 
 // Lua: storm.io.set( value, pin1, pin2, ..., pinn )
@@ -676,6 +687,7 @@ const LUA_REG_TYPE libstorm_os_map[] =
     { LSTRKEY( "procline"), LFUNCVAL ( libstorm_os_procline) },
     { LSTRKEY( "read_stdin"), LFUNCVAL ( libstorm_os_read_stdin) },
     { LSTRKEY( "freeram"), LFUNCVAL ( libstorm_os_freeram) },
+    { LSTRKEY( "nodeid" ), LFUNCVAL ( libstorm_os_getnodeid ) },
     { LSTRKEY( "SHIFT_0" ), LNUMVAL ( 1 ) },
     { LSTRKEY( "SHIFT_16" ), LNUMVAL ( 2 ) },
     { LSTRKEY( "SHIFT_48" ), LNUMVAL ( 3 ) },
