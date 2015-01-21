@@ -3,7 +3,6 @@
 
 module( ..., package.seeall )
 
-print ("[!!] BUILD CONFIG RAN ")
 -- Add specific components to the 'components' table
 function add_platform_components( t, board, cpu )
 
@@ -21,6 +20,7 @@ function get_platform_modules( board, cpu )
       os = { lib='"os"', map = "libstorm_os_map", open = false },
       mp = { lib='"mp"', map = "libmsgpack_mp_map", open = false },
       net = { lib='"net"', map = "libstorm_net_map", open = false },
+      array  = { lib='"array"', map = "libstorm_array_map", open = false},
   }
   return m
 end
