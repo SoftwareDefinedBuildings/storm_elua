@@ -26,6 +26,10 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_u32(uint32_t id, uint32_t arg0)
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
 }
+int32_t __attribute__((naked)) k_syscall_ex_ru32_u32(uint32_t id, uint32_t arg0)
+{
+    __syscall_body(ABI_ID_SYSCALL_EX);
+}
 int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_u32_cb_vptr(uint32_t id, uint32_t arg0, uint32_t arg1, cb_t cb, void *r)
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
@@ -78,6 +82,7 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_cptr_u32_cptr_u32(uint32_t id, 
 
 //---------- SysInfo
 #define sysinfo_nodeid() k_syscall_ex_ru32(0x401)
+#define sysinfo_getmac(buffer) k_syscall_ex_ru32_u32(0x402, (buffer))
 
 #warning todo make gpio irq enforce one per pin
 
@@ -148,11 +153,39 @@ static int libstorm_io_getd( lua_State *L )
     return tos;
 }
 
+// returns the NODE ID
 static int libstorm_os_getnodeid( lua_State *L )
 {
     uint32_t rv;
     rv = sysinfo_nodeid();
     lua_pushnumber(L, rv);
+    return 1;
+}
+
+// Retrieve the MAC address as an array
+static int libstorm_os_getmac( lua_State *L )
+{
+    uint8_t mac[6];
+    int i;
+    sysinfo_getmac((uint32_t)&mac);
+    lua_createtable(L, 6, 0);
+    for (i=0; i<6; i++) {
+        lua_pushinteger(L, mac[i]);
+        lua_rawseti(L, -2, i);
+    }
+    return 1;
+}
+
+// Retrieve the MAC address as an (integer-formatted) string
+//TODO: handle hex string formatting
+static int libstorm_os_getmacstring( lua_State *L )
+{
+    uint8_t mac[6];
+    static char smac[18];
+    sysinfo_getmac((uint32_t)&mac);
+    snprintf(smac, 18, "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    lua_pushstring(L, smac);
+    //lua_pushfstring(L, "%d:%d:%d:%d:%d:%d", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     return 1;
 }
 
@@ -854,7 +887,8 @@ const LUA_REG_TYPE libstorm_os_map[] =
     { LSTRKEY( "read_stdin"), LFUNCVAL ( libstorm_os_read_stdin) },
     { LSTRKEY( "imageram"), LFUNCVAL ( libstorm_os_freeram) },
     { LSTRKEY( "nodeid" ), LFUNCVAL ( libstorm_os_getnodeid ) },
-
+    { LSTRKEY( "getmac" ), LFUNCVAL ( libstorm_os_getmac ) },
+    { LSTRKEY( "getmacstring" ), LFUNCVAL ( libstorm_os_getmacstring ) },
     { LSTRKEY( "SHIFT_0" ), LNUMVAL ( 1 ) },
     { LSTRKEY( "SHIFT_16" ), LNUMVAL ( 2 ) },
     { LSTRKEY( "SHIFT_48" ), LNUMVAL ( 3 ) },
