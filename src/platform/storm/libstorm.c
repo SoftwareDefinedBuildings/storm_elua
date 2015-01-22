@@ -830,8 +830,7 @@ const LUA_REG_TYPE libstorm_io_map[] =
     { LSTRKEY( "watch_single" ), LFUNCVAL ( libstorm_io_watch_single ) },
     { LSTRKEY( "watch_all" ), LFUNCVAL ( libstorm_io_watch_all ) },
     { LSTRKEY( "cancel_watch" ), LFUNCVAL ( libstorm_io_cancel_watch ) },
-  //  { LSTRKEY( "i2c_write" ), LFUNCVAL ( libstorm_io_i2c_write ) },
- //   { LSTRKEY( "i2c_read" ), LFUNCVAL ( libstorm_io_i2c_read ) },
+
     { LSTRKEY( "D0" ), LNUMVAL ( 0 ) },
     { LSTRKEY( "D1" ), LNUMVAL ( 1 ) },
     { LSTRKEY( "D2" ), LNUMVAL ( 2 ) },
@@ -892,10 +891,10 @@ const LUA_REG_TYPE libstorm_os_map[] =
     { LSTRKEY( "SHIFT_0" ), LNUMVAL ( 1 ) },
     { LSTRKEY( "SHIFT_16" ), LNUMVAL ( 2 ) },
     { LSTRKEY( "SHIFT_48" ), LNUMVAL ( 3 ) },
-    { LSTRKEY( "MILLISECOND" ), LNUMVAL ( 187 ) },
-    { LSTRKEY( "SECOND" ), LNUMVAL ( 187500 ) },
-    { LSTRKEY( "MINUTE" ), LNUMVAL ( 11250000 ) },
-    { LSTRKEY( "HOUR" ), LNUMVAL ( 675000000 ) },
+    { LSTRKEY( "MILLISECOND" ), LNUMVAL ( 375 ) },
+    { LSTRKEY( "SECOND" ), LNUMVAL ( 375000 ) },
+    { LSTRKEY( "MINUTE" ), LNUMVAL ( 22500000 ) },
+    { LSTRKEY( "HOUR" ), LNUMVAL ( 1350000000 ) },
     { LNILKEY, LNILVAL }
 };
 const LUA_REG_TYPE libstorm_net_map[] =
