@@ -108,7 +108,7 @@ static const u16 pinspec_map [] =
     0x0102, //A3 = PB02
     0x0007, //A4 = PA07
     0x0005, //A5 = PA05
-    0x0000, //GP0 = PA00
+    0x020A, //GP0 = PC10
 };
 
 // Lua: storm.io.get(pin1, pin2, ..., pinn )
