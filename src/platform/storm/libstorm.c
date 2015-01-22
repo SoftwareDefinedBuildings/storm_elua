@@ -85,6 +85,7 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_cptr_u32_cptr_u32(uint32_t id, 
 #define sysinfo_getmac(buffer) k_syscall_ex_ru32_u32(0x402, (buffer))
 
 static lua_State *_cb_L;
+#define MAXPINSPEC 20
 static const u16 pinspec_map [] =
 {
     0x0109, //D0 = PB09
@@ -107,6 +108,7 @@ static const u16 pinspec_map [] =
     0x0102, //A3 = PB02
     0x0007, //A4 = PA07
     0x0005, //A5 = PA05
+    0x0000, //GP0 = PA00
 };
 
 // Lua: storm.io.get(pin1, pin2, ..., pinn )
@@ -119,7 +121,7 @@ static int libstorm_io_get( lua_State *L )
     for( i = 1; i <= tos; i ++ )
     {
         pinspec = luaL_checkint(L, i);
-        if (pinspec < 0 || pinspec > 19)
+        if (pinspec < 0 || pinspec > MAXPINSPEC)
           return luaL_error( L, "invalid IO pin");
 
         rv = simplegpio_get(pinspec_map[pinspec]);
@@ -138,7 +140,7 @@ static int libstorm_io_getd( lua_State *L )
     for( i = 1; i <= tos; i ++ )
     {
         pinspec = luaL_checkint(L, i);
-        if (pinspec < 0 || pinspec > 19)
+        if (pinspec < 0 || pinspec > MAXPINSPEC)
           return luaL_error( L, "invalid IO pin");
 
         rv = simplegpio_getp(pinspec_map[pinspec]);
@@ -197,7 +199,7 @@ static int libstorm_io_set( lua_State *L )
     for( i = 2; i <= lua_gettop( L ); i ++ )
     {
     pinspec = luaL_checkint( L, i );
-    if (pinspec < 0 || pinspec > 19)
+    if (pinspec < 0 || pinspec > MAXPINSPEC)
       return luaL_error( L, "invalid IO pin");
 
     rv = simplegpio_set(value, pinspec_map[pinspec]);
@@ -224,7 +226,7 @@ static int libstorm_io_set_mode( lua_State *L )
     for( i = 2; i <= lua_gettop( L ); i ++ )
     {
         pinspec = luaL_checkint( L, i );
-        if (pinspec < 0 || pinspec > 19)
+        if (pinspec < 0 || pinspec > MAXPINSPEC)
             return luaL_error( L, "invalid IO pin");
         rv = simplegpio_set_mode(dir, pinspec_map[pinspec]);
         if (rv != 0)
@@ -249,7 +251,7 @@ static int libstorm_io_set_pull( lua_State *L )
     for( i = 2; i <= lua_gettop( L ); i ++ )
     {
         pinspec = luaL_checkint( L, i );
-        if (pinspec < 0 || pinspec > 19)
+        if (pinspec < 0 || pinspec > MAXPINSPEC) 
             return luaL_error( L, "invalid IO pin");
         rv = simplegpio_set_pull(dir, pinspec_map[pinspec]);
         if (rv != 0)
@@ -705,7 +707,7 @@ static int libstorm_io_watch_impl(lua_State *L, int repeat)
     }
     watchtype = luaL_checkinteger(L, 1);
     pin = luaL_checkinteger(L, 2);
-    if (pin < 0 || pin > 19)
+    if (pin < 0 || pin > MAXPINSPEC)	
         return luaL_error( L, "invalid IO pin");
     if (watchtype < 0 || watchtype > 2)
         return luaL_error(L, "invalid change type");
@@ -811,6 +813,7 @@ const LUA_REG_TYPE libstorm_io_map[] =
     { LSTRKEY( "A3" ), LNUMVAL ( 17 ) },
     { LSTRKEY( "A4" ), LNUMVAL ( 18 ) },
     { LSTRKEY( "A5" ), LNUMVAL ( 19 ) },
+    { LSTRKEY( "GP0"), LNUMVAL ( 20 ) }, /* GP0 pin 75 LED */
     { LSTRKEY( "OUTPUT" ), LNUMVAL(0) },
     { LSTRKEY( "INPUT" ), LNUMVAL(1) },
     { LSTRKEY( "PERIPHERAL" ), LNUMVAL(2) },
