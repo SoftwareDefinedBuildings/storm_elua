@@ -21,6 +21,7 @@ function get_platform_modules( board, cpu )
       mp = { lib='"mp"', map = "libmsgpack_mp_map", open = false },
       net = { lib='"net"', map = "libstorm_net_map", open = false },
       array  = { lib='"array"', map = "libstorm_array_map", open = false},
+      i2c  = { lib='"i2c"', map = "libstorm_i2c_map", open = false},
   }
   return m
 end

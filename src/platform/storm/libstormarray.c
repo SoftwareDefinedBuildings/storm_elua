@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <interface.h>
 #include <stdlib.h>
+#include "libstormarray.h"
 
 #if LUA_OPTIMIZE_MEMORY == 0
 #error libstorm can only be compiled with LTR on (optram=true)
@@ -20,23 +21,8 @@
 
 #define ARRAY_SANE_SIZE 4000
 
-enum {
-    ARR_TYPE_INT8 = 1,
-    ARR_TYPE_UINT8 = 2,
-    ARR_TYPE_INT16 = 3,
-    ARR_TYPE_UINT16 = 4,
-    ARR_TYPE_INT32 = 5
-};
-
-#define ARR_START(x) (((uint8_t*)((x)) + sizeof(storm_array_t)))
 const uint8_t arr_sizemap [] = {0, 1, 1, 2, 2, 4};
 const uint8_t arr_shiftmap [] = {0, 0, 0, 1, 1, 2};
-typedef struct
-{
-    uint8_t type;
-    uint8_t reserved;
-    uint16_t len;
-} __attribute__((packed)) storm_array_t;
 
 // Module function map
 #define MIN_OPT_LEVEL 2
