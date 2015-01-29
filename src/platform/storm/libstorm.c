@@ -417,7 +417,7 @@ static int libstorm_os_run_callback(lua_State *L)
 static int libstorm_os_wait_callback(lua_State *L)
 {
     _cb_L = L;
-    k_run_callback();
+    k_wait_callback();
     return 0;
 }
 
@@ -804,7 +804,6 @@ static void libstorm_i2c_transact_callback(void* tr, int status)
     i2c_transact_t *t = tr;
     int rv;
     const char* msg;
-    printf("i2c callback invoked\n");
     lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, t->cbref);
     lua_pushnumber(_cb_L, status);
     lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, t->arrayref);
@@ -867,7 +866,10 @@ static int libstorm_i2c_read(lua_State *L)
     return libstorm_io_i2c_x(L, 1);
 }
 
-
+static int explode(lua_State *L)
+{
+    return lua_yield(L, 0);
+}
 
 // Module function map
 #define MIN_OPT_LEVEL 2
@@ -924,12 +926,17 @@ const LUA_REG_TYPE libstorm_i2c_map[] =
 {
     { LSTRKEY( "write" ), LFUNCVAL ( libstorm_i2c_write ) },
     { LSTRKEY( "read" ), LFUNCVAL ( libstorm_i2c_read ) },
-    { LSTRKEY( "I2C_INT" ), LNUMVAL(0x200) },
-    { LSTRKEY( "I2C_EXT" ), LNUMVAL(0x100) },
-    { LSTRKEY( "I2C_START" ), LNUMVAL(1) },
-    { LSTRKEY( "I2C_RSTART" ), LNUMVAL(1) },
-    { LSTRKEY( "I2C_ACKLAST" ), LNUMVAL(2) },
-    { LSTRKEY( "I2C_STOP" ), LNUMVAL(4) },
+    { LSTRKEY( "INT" ), LNUMVAL(0x200) },
+    { LSTRKEY( "EXT" ), LNUMVAL(0x100) },
+    { LSTRKEY( "START" ), LNUMVAL(1) },
+    { LSTRKEY( "RSTART" ), LNUMVAL(1) },
+    { LSTRKEY( "ACKLAST" ), LNUMVAL(2) },
+    { LSTRKEY( "STOP" ), LNUMVAL(4) },
+    { LSTRKEY( "OK" ), LNUMVAL(0) },
+    { LSTRKEY( "DNAK" ), LNUMVAL(1) },
+    { LSTRKEY( "ANAK" ), LNUMVAL(2) },
+    { LSTRKEY( "ERR" ), LNUMVAL(3) },
+    { LSTRKEY( "ARBLST" ), LNUMVAL(4) },
     { LNILKEY, LNILVAL }
 };
 
@@ -948,6 +955,7 @@ const LUA_REG_TYPE libstorm_os_map[] =
     { LSTRKEY( "nodeid" ), LFUNCVAL ( libstorm_os_getnodeid ) },
     { LSTRKEY( "getmac" ), LFUNCVAL ( libstorm_os_getmac ) },
     { LSTRKEY( "getmacstring" ), LFUNCVAL ( libstorm_os_getmacstring ) },
+    { LSTRKEY( "explode" ), LFUNCVAL ( explode ) },
     { LSTRKEY( "SHIFT_0" ), LNUMVAL ( 1 ) },
     { LSTRKEY( "SHIFT_16" ), LNUMVAL ( 2 ) },
     { LSTRKEY( "SHIFT_48" ), LNUMVAL ( 3 ) },
