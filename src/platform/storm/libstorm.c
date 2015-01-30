@@ -88,6 +88,7 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_u32_u32_buf_u32_vptr_vptr(u
 //---------- SysInfo
 #define sysinfo_nodeid() k_syscall_ex_ru32(0x401)
 #define sysinfo_getmac(buffer) k_syscall_ex_ru32_u32(0x402, (buffer))
+#define sysinfo_getipaddr(buffer) k_syscall_ex_ru32_u32(0x403, (buffer))
 
 #warning todo make gpio irq enforce one per pin
 
@@ -195,6 +196,32 @@ static int libstorm_os_getmacstring( lua_State *L )
     //lua_pushfstring(L, "%d:%d:%d:%d:%d:%d", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     return 1;
 }
+
+static int libstorm_os_getipaddr( lua_State *L )
+{
+    uint8_t ip[16];
+    int i;
+    sysinfo_getipaddr((uint32_t)&ip);
+    lua_createtable(L, 16, 0);
+    for (i=0; i<16; i++) {
+        lua_pushinteger(L, ip[i]);
+        lua_rawseti(L, -2, i);
+    }
+    return 1;
+}
+
+static int libstorm_os_getipaddrstring( lua_State *L )
+{
+    uint8_t ip[16];
+    static char sip[40];
+    sysinfo_getipaddr((uint32_t)&ip);
+    snprintf(sip, 40, "%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x",
+                 ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7],
+                 ip[8], ip[9], ip[10], ip[11], ip[12], ip[13], ip[14], ip[15]);
+    lua_pushstring(L, sip);
+    return 1;
+}
+
 
 // Lua: storm.io.set( value, pin1, pin2, ..., pinn )
 static int libstorm_io_set( lua_State *L )
@@ -955,6 +982,8 @@ const LUA_REG_TYPE libstorm_os_map[] =
     { LSTRKEY( "nodeid" ), LFUNCVAL ( libstorm_os_getnodeid ) },
     { LSTRKEY( "getmac" ), LFUNCVAL ( libstorm_os_getmac ) },
     { LSTRKEY( "getmacstring" ), LFUNCVAL ( libstorm_os_getmacstring ) },
+    { LSTRKEY( "getipaddr" ), LFUNCVAL ( libstorm_os_getipaddr ) },
+    { LSTRKEY( "getipaddrstring" ), LFUNCVAL ( libstorm_os_getipaddrstring ) },
     { LSTRKEY( "explode" ), LFUNCVAL ( explode ) },
     { LSTRKEY( "SHIFT_0" ), LNUMVAL ( 1 ) },
     { LSTRKEY( "SHIFT_16" ), LNUMVAL ( 2 ) },
