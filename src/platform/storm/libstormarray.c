@@ -48,6 +48,16 @@ static const LUA_REG_TYPE array_meta_map[] =
     { LNILKEY, LNILVAL }
 };
 
+int storm_array_nc_create(lua_State *L, int count, int type)
+{
+    storm_array_t *arr = lua_newuserdata(L, sizeof(storm_array_t) + count*arr_sizemap[type]);
+    memset(ARR_START(arr), 0, count*arr_sizemap[type]);
+    arr->type = type;
+    arr->len = count*arr_sizemap[type];
+    lua_pushrotable(L, (void*)array_meta_map);
+    lua_setmetatable(L, -2);
+    return 1;
+}
 //lua storm.array.create(count, default_element_size)
 static int arr_create(lua_State *L)
 {

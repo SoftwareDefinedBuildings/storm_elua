@@ -19,5 +19,6 @@ enum {
 };
 
 #define ARR_START(x) (((uint8_t*)((x)) + sizeof(storm_array_t)))
+int storm_array_nc_create(lua_State *L, int count, int type);
 
 #endif
