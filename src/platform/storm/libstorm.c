@@ -5,6 +5,7 @@
 #include "platform.h"
 #include "lrotable.h"
 #include "platform_conf.h"
+#include "platform_generic.h"
 #include "auxmods.h"
 #include "libstormarray.h"
 #include <string.h>
@@ -402,7 +403,7 @@ static int libstorm_os_periodically(lua_State *L)
 }
 
 // Lua: storm.os.invokeLater( interval, function, arg0, arg1, arg2)
-static int libstorm_os_later(lua_State *L)
+int libstorm_os_invokeLater(lua_State *L)
 {
     return libstorm_tmr_impl(L, 0);
 }
@@ -943,7 +944,7 @@ const LUA_REG_TYPE libstorm_i2c_map[] =
 const LUA_REG_TYPE libstorm_os_map[] =
 {
     { LSTRKEY( "invokePeriodically" ), LFUNCVAL ( libstorm_os_periodically ) },
-    { LSTRKEY( "invokeLater" ),  LFUNCVAL ( libstorm_os_later ) },
+    { LSTRKEY( "invokeLater" ),  LFUNCVAL ( libstorm_os_invokeLater ) },
     { LSTRKEY( "cancel" ), LFUNCVAL ( libstorm_os_cancel ) },
     { LSTRKEY( "now" ), LFUNCVAL ( libstorm_os_now ) },
     { LSTRKEY( "run_callback" ), LFUNCVAL ( libstorm_os_run_callback ) },
@@ -959,10 +960,10 @@ const LUA_REG_TYPE libstorm_os_map[] =
     { LSTRKEY( "SHIFT_0" ), LNUMVAL ( 1 ) },
     { LSTRKEY( "SHIFT_16" ), LNUMVAL ( 2 ) },
     { LSTRKEY( "SHIFT_48" ), LNUMVAL ( 3 ) },
-    { LSTRKEY( "MILLISECOND" ), LNUMVAL ( 375 ) },
-    { LSTRKEY( "SECOND" ), LNUMVAL ( 375000 ) },
-    { LSTRKEY( "MINUTE" ), LNUMVAL ( 22500000 ) },
-    { LSTRKEY( "HOUR" ), LNUMVAL ( 1350000000 ) },
+    { LSTRKEY( "MILLISECOND" ), LNUMVAL ( MILLISECOND_TICKS ) },
+    { LSTRKEY( "SECOND" ), LNUMVAL ( SECOND_TICKS ) },
+    { LSTRKEY( "MINUTE" ), LNUMVAL ( MINUTE_TICKS ) },
+    { LSTRKEY( "HOUR" ), LNUMVAL ( HOUR_TICKS ) },
     { LNILKEY, LNILVAL }
 };
 const LUA_REG_TYPE libstorm_net_map[] =
