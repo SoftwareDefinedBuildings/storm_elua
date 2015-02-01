@@ -15,7 +15,11 @@ enum {
     ARR_TYPE_UINT8 = 2,
     ARR_TYPE_INT16 = 3,
     ARR_TYPE_UINT16 = 4,
-    ARR_TYPE_INT32 = 5
+    ARR_TYPE_INT32 = 5,
+
+    GS_TYPE_INT16_BE = 6,
+    GS_TYPE_UINT16_BE = 7,
+    GS_TYPE_INT32_BE = 8
 };
 
 #define ARR_START(x) (((uint8_t*)((x)) + sizeof(storm_array_t)))
