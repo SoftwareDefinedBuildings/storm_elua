@@ -5,7 +5,9 @@
 #include "platform.h"
 #include "lrotable.h"
 #include "platform_conf.h"
+#include "platform_generic.h"
 #include "auxmods.h"
+#include "libstormarray.h"
 #include <string.h>
 #include <stdint.h>
 #include <interface.h>
@@ -54,6 +56,10 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_cptr_u32_cptr_u32(uint32_t id, 
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
 }
+int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_u32_u32_buf_u32_vptr_vptr(uint32_t id, uint32_t arg0, uint32_t arg1, uint8_t* arg2, uint32_t arg3, void* cb, void* r)
+{
+    __syscall_body(ABI_ID_SYSCALL_EX);
+}
 
 //Some driver specific syscalls
 //--------- GPIO
@@ -83,11 +89,12 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_cptr_u32_cptr_u32(uint32_t id, 
 //---------- SysInfo
 #define sysinfo_nodeid() k_syscall_ex_ru32(0x401)
 #define sysinfo_getmac(buffer) k_syscall_ex_ru32_u32(0x402, (buffer))
+#define sysinfo_getipaddr(buffer) k_syscall_ex_ru32_u32(0x403, (buffer))
 
 #warning todo make gpio irq enforce one per pin
 
 //---------- I2C
-#define i2c_transact(iswrite, address, flags, buffer, len, callback, r) k_syscall_ex_ri32_u32_u32_u32_buf_u32_cb_vptr((0x500 + iswrite), (address), (flags), (buffer), (len), (callback), (r))
+#define i2c_transact(iswrite, address, flags, buffer, len, callback, r) k_syscall_ex_ri32_u32_u32_u32_buf_u32_vptr_vptr((0x500 + (iswrite)), (address), (flags), (buffer), (len), (callback), (r))
 
 
 static lua_State *_cb_L;
@@ -190,6 +197,32 @@ static int libstorm_os_getmacstring( lua_State *L )
     //lua_pushfstring(L, "%d:%d:%d:%d:%d:%d", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     return 1;
 }
+
+static int libstorm_os_getipaddr( lua_State *L )
+{
+    uint8_t ip[16];
+    int i;
+    sysinfo_getipaddr((uint32_t)&ip);
+    lua_createtable(L, 16, 0);
+    for (i=0; i<16; i++) {
+        lua_pushinteger(L, ip[i]);
+        lua_rawseti(L, -2, i);
+    }
+    return 1;
+}
+
+static int libstorm_os_getipaddrstring( lua_State *L )
+{
+    uint8_t ip[16];
+    static char sip[40];
+    sysinfo_getipaddr((uint32_t)&ip);
+    snprintf(sip, 40, "%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x",
+                 ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7],
+                 ip[8], ip[9], ip[10], ip[11], ip[12], ip[13], ip[14], ip[15]);
+    lua_pushstring(L, sip);
+    return 1;
+}
+
 
 // Lua: storm.io.set( value, pin1, pin2, ..., pinn )
 static int libstorm_io_set( lua_State *L )
@@ -397,7 +430,7 @@ static int libstorm_os_periodically(lua_State *L)
 }
 
 // Lua: storm.os.invokeLater( interval, function, arg0, arg1, arg2)
-static int libstorm_os_later(lua_State *L)
+int libstorm_os_invokeLater(lua_State *L)
 {
     return libstorm_tmr_impl(L, 0);
 }
@@ -412,7 +445,7 @@ static int libstorm_os_run_callback(lua_State *L)
 static int libstorm_os_wait_callback(lua_State *L)
 {
     _cb_L = L;
-    k_run_callback();
+    k_wait_callback();
     return 0;
 }
 
@@ -787,37 +820,84 @@ static int libstorm_os_freeram(lua_State *L) {
     return 1;
 }
 
-#if 0
-#define i2c_transact(iswrite, address, flags, buffer, len, callback, r) k_syscall_ex_ri32_u32_u32_u32_buf_u32_cb_vptr((0x500 + iswrite), (address), (flags), (buffer), (len), (callback), (r))
-
 typedef struct
 {
-    int  cbref;
-    void *r;
+    int cbref;
+    int arrayref;
     uint32_t len;
-} i2c_transact_hdr_t;
+} i2c_transact_t;
 
-static int libstorm_transact_deconstruct(lua_State *L)
+static void libstorm_i2c_transact_callback(void* tr, int status)
 {
+    i2c_transact_t *t = tr;
+    int rv;
+    const char* msg;
+    lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, t->cbref);
+    lua_pushnumber(_cb_L, status);
+    lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, t->arrayref);
+    if ((rv = lua_pcall(_cb_L, 2, 0, 0)) != 0)
+    {
+        printf("[ERROR] could not run i2c callback (%d)\n", rv);
+        msg = lua_tostring(_cb_L, -1);
+        printf("[ERROR] msg: %s\n", msg);
+    }
+    luaL_unref(_cb_L, LUA_REGISTRYINDEX, t->cbref);
+    luaL_unref(_cb_L, LUA_REGISTRYINDEX, t->arrayref);
 }
 
 static int libstorm_io_i2c_x(lua_State *L, uint8_t iswrite)
 {
     uint32_t address;
-    uint32_t len;
+    uint32_t flags;
+    storm_array_t *arr;
     i2c_transact_t *t;
-
-    i2c_transact(iswrite, address, t->buffer; )
+    int rv;
+    if (lua_gettop(L) != 4)
+    {
+        return luaL_error(L, "expected (address, flags, array, function())");
+    }
+    address = luaL_checkinteger(L, 1);
+    flags = luaL_checkinteger(L, 2);
+    arr = lua_touserdata(L, 3);
+    if (((address & 0xFF00) < 0x100) || ((address && 0xFF00) > 0x200))
+        return luaL_error( L, "invalid address");
+    //check flags?
+    t = (i2c_transact_t*) malloc(sizeof(i2c_transact_t));
+    if (!t)
+    {
+        return luaL_error( L, "out of memory");
+    }
+    t->len = arr->len;
+    rv = i2c_transact(iswrite, address, flags, ARR_START(arr), t->len, (void*)libstorm_i2c_transact_callback, t);
+    if (rv != 0)
+    {
+        free(t);
+        lua_pushnil(L);
+        return 1;
+    }
+    else
+    {
+        t->cbref = luaL_ref(L, LUA_REGISTRYINDEX);
+        t->arrayref = luaL_ref(L, LUA_REGISTRYINDEX);
+        lua_pushlightuserdata ( L, t);
+        return 1;
+    }
 }
-//lua storm.i2c.write(
-static int libstorm_io_i2c_write(lua_State *L)
+//lua storm.i2c.write(address, flags, array, function(status)) -> nil
+static int libstorm_i2c_write(lua_State *L)
 {
+    return libstorm_io_i2c_x(L, 2);
 }
-static int libstorm_io_i2c_read(lua_State *L)
+//lua storm.i2c.read(address, flags, array_or_number, function(status, array)) -> nil
+static int libstorm_i2c_read(lua_State *L)
 {
+    return libstorm_io_i2c_x(L, 1);
 }
-#endif
 
+static int explode(lua_State *L)
+{
+    return lua_yield(L, 0);
+}
 
 // Module function map
 #define MIN_OPT_LEVEL 2
@@ -832,7 +912,6 @@ const LUA_REG_TYPE libstorm_io_map[] =
     { LSTRKEY( "watch_single" ), LFUNCVAL ( libstorm_io_watch_single ) },
     { LSTRKEY( "watch_all" ), LFUNCVAL ( libstorm_io_watch_all ) },
     { LSTRKEY( "cancel_watch" ), LFUNCVAL ( libstorm_io_cancel_watch ) },
-
     { LSTRKEY( "D0" ), LNUMVAL ( 0 ) },
     { LSTRKEY( "D1" ), LNUMVAL ( 1 ) },
     { LSTRKEY( "D2" ), LNUMVAL ( 2 ) },
@@ -867,19 +946,32 @@ const LUA_REG_TYPE libstorm_io_map[] =
     { LSTRKEY( "FALLING" ), LNUMVAL(2) },
     { LSTRKEY( "RISING" ), LNUMVAL(1) },
     { LSTRKEY( "CHANGE" ), LNUMVAL(0) },
-    { LSTRKEY( "I2C_INT" ), LNUMVAL(2) },
-    { LSTRKEY( "I2C_EXT" ), LNUMVAL(1) },
-    { LSTRKEY( "I2C_START" ), LNUMVAL(1) },
-    { LSTRKEY( "I2C_RSTART" ), LNUMVAL(1) },
-    { LSTRKEY( "I2C_ACKLAST" ), LNUMVAL(2) },
-    { LSTRKEY( "I2C_STOP" ), LNUMVAL(4) },
+
+    { LNILKEY, LNILVAL }
+};
+
+const LUA_REG_TYPE libstorm_i2c_map[] =
+{
+    { LSTRKEY( "write" ), LFUNCVAL ( libstorm_i2c_write ) },
+    { LSTRKEY( "read" ), LFUNCVAL ( libstorm_i2c_read ) },
+    { LSTRKEY( "INT" ), LNUMVAL(0x200) },
+    { LSTRKEY( "EXT" ), LNUMVAL(0x100) },
+    { LSTRKEY( "START" ), LNUMVAL(1) },
+    { LSTRKEY( "RSTART" ), LNUMVAL(1) },
+    { LSTRKEY( "ACKLAST" ), LNUMVAL(2) },
+    { LSTRKEY( "STOP" ), LNUMVAL(4) },
+    { LSTRKEY( "OK" ), LNUMVAL(0) },
+    { LSTRKEY( "DNAK" ), LNUMVAL(1) },
+    { LSTRKEY( "ANAK" ), LNUMVAL(2) },
+    { LSTRKEY( "ERR" ), LNUMVAL(3) },
+    { LSTRKEY( "ARBLST" ), LNUMVAL(4) },
     { LNILKEY, LNILVAL }
 };
 
 const LUA_REG_TYPE libstorm_os_map[] =
 {
     { LSTRKEY( "invokePeriodically" ), LFUNCVAL ( libstorm_os_periodically ) },
-    { LSTRKEY( "invokeLater" ),  LFUNCVAL ( libstorm_os_later ) },
+    { LSTRKEY( "invokeLater" ),  LFUNCVAL ( libstorm_os_invokeLater ) },
     { LSTRKEY( "cancel" ), LFUNCVAL ( libstorm_os_cancel ) },
     { LSTRKEY( "now" ), LFUNCVAL ( libstorm_os_now ) },
     { LSTRKEY( "run_callback" ), LFUNCVAL ( libstorm_os_run_callback ) },
@@ -891,13 +983,16 @@ const LUA_REG_TYPE libstorm_os_map[] =
     { LSTRKEY( "nodeid" ), LFUNCVAL ( libstorm_os_getnodeid ) },
     { LSTRKEY( "getmac" ), LFUNCVAL ( libstorm_os_getmac ) },
     { LSTRKEY( "getmacstring" ), LFUNCVAL ( libstorm_os_getmacstring ) },
+    { LSTRKEY( "getipaddr" ), LFUNCVAL ( libstorm_os_getipaddr ) },
+    { LSTRKEY( "getipaddrstring" ), LFUNCVAL ( libstorm_os_getipaddrstring ) },
+    { LSTRKEY( "explode" ), LFUNCVAL ( explode ) },
     { LSTRKEY( "SHIFT_0" ), LNUMVAL ( 1 ) },
     { LSTRKEY( "SHIFT_16" ), LNUMVAL ( 2 ) },
     { LSTRKEY( "SHIFT_48" ), LNUMVAL ( 3 ) },
-    { LSTRKEY( "MILLISECOND" ), LNUMVAL ( 375 ) },
-    { LSTRKEY( "SECOND" ), LNUMVAL ( 375000 ) },
-    { LSTRKEY( "MINUTE" ), LNUMVAL ( 22500000 ) },
-    { LSTRKEY( "HOUR" ), LNUMVAL ( 1350000000 ) },
+    { LSTRKEY( "MILLISECOND" ), LNUMVAL ( MILLISECOND_TICKS ) },
+    { LSTRKEY( "SECOND" ), LNUMVAL ( SECOND_TICKS ) },
+    { LSTRKEY( "MINUTE" ), LNUMVAL ( MINUTE_TICKS ) },
+    { LSTRKEY( "HOUR" ), LNUMVAL ( HOUR_TICKS ) },
     { LNILKEY, LNILVAL }
 };
 const LUA_REG_TYPE libstorm_net_map[] =

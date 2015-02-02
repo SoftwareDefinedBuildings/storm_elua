@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <interface.h>
 #include <stdlib.h>
+#include "libstormarray.c"
 
 #include <math.h>
 #include <assert.h>
@@ -482,8 +483,71 @@ void mp_encode_lua_null(lua_State *L, mp_buf *buf) {
     mp_buf_append(buf,b,1);
 }
 
+// encode the object at the top of the stack as a msgpack EXT with type @type and length @len
+// Gabe Fierro gtfierro@eecs.berkeley.edu
+void mp_encode_ext(lua_State *L, mp_buf *buf, uint32_t len, uint8_t type) {
+    unsigned char b[4];
+    int enclen;
+
+    if (len == 4) {
+        b[0] = 0xd6;
+        b[1] = type;
+        enclen = 2;
+    } else if (len == 8) {
+        b[0] = 0xd7;
+        b[1] = type;
+        enclen = 2;
+    } else if (len == 16) {
+        b[0] = 0xd8;
+        b[1] = type;
+        enclen = 2;
+    } else {
+        b[0] = 0xc8;
+        b[1] = len >> 8;
+        b[2] = len & 0xff;
+        b[3] = type;
+        enclen = 4;
+    }
+    mp_buf_append(buf, b, enclen);
+    mp_buf_append(buf, (const unsigned char *)lua_topointer(L, 1), len);
+}
+
+// encode a storm array into msgpack -- GTF
+void mp_encode_stormarray(lua_State *L, mp_buf *buf) {
+    // stormarray is minimum 4 bytes
+    uint32_t len = 4;
+
+    // get the stormarray off the stack
+    storm_array_t *arr = lua_touserdata(L, 1);
+
+    // increase len by length of data in stormarray
+    len += arr->len;
+
+    // encode it as msgpack ext
+    mp_encode_ext(L, buf, len, 1); //TODO: assign a #def to stormarray
+}
+
+// decode a storm array from msgapck -- GTF
+void mp_decode_stormarray(lua_State *L, mp_cur *c, size_t len) {
+    assert(len <= UINT_MAX);
+
+    // create a new storm array on the stack
+    storm_array_t *arr = lua_newuserdata(L, len);
+    // copy the contents from the msgpack cursor
+    memcpy(arr, c->p, len);
+
+    // assign the metatable
+    lua_pushrotable(L, (void*)array_meta_map);
+    lua_setmetatable(L, -2);
+
+    // advance pointer by length
+    mp_cur_consume(c, len);
+}
+
 void mp_encode_lua_type(lua_State *L, mp_buf *buf, int level) {
     int t = lua_type(L,-1);
+
+    int gotmetatable = 0;
 
     /* Limit the encoding of nested tables to a specified maximum depth, so that
      * we survive when called against circular references in tables. */
@@ -503,7 +567,26 @@ void mp_encode_lua_type(lua_State *L, mp_buf *buf, int level) {
         break;
     #endif
     case LUA_TTABLE: mp_encode_lua_table(L,buf,level); break;
-    default: mp_encode_lua_null(L,buf); break;
+    case LUA_TUSERDATA:
+        // get metatable for our userdata object
+        gotmetatable = lua_getmetatable(L, -1);
+        // if we ain't got no metatable, we ain't got no hope of figurin' out what it is
+        if (!gotmetatable)
+        {
+            mp_encode_lua_null(L,buf);
+            break;
+        }
+        // This checks if we are a storm array (via libstormarray.c)
+        // by comparing the addreses of the metatables
+        if ((uint32_t)&array_meta_map == (uint32_t)lua_topointer(L, -1))
+        {
+            lua_pop(L, 1); // remove metatable from stack
+            mp_encode_stormarray(L, buf);
+        }
+        break;
+    default:
+        mp_encode_lua_null(L,buf);
+        break;
     }
     lua_pop(L,1);
 }
@@ -753,6 +836,36 @@ void mp_decode_to_lua_type(lua_State *L, mp_cur *c) {
             mp_decode_to_lua_hash(L,c,l);
         }
         break;
+    case 0xd6: /* fixext 4 */
+        mp_cur_need(c,2);
+        {
+            mp_cur_consume(c, 2);
+            mp_decode_stormarray(L, c, 4);
+        }
+        break;
+    case 0xd7: /* fixext 8 */
+        mp_cur_need(c,2);
+        {
+            mp_cur_consume(c, 2);
+            mp_decode_stormarray(L, c, 8);
+        }
+        break;
+    case 0xd8: /* fixext 16 */
+        mp_cur_need(c,2);
+        {
+            mp_cur_consume(c, 2);
+            mp_decode_stormarray(L, c, 16);
+        }
+        break;
+    case 0xc8: /* ext 16 */
+        mp_cur_need(c,4);
+        {
+            size_t l = ((size_t)c->p[1] << 8) |
+                       ((size_t)c->p[2]);
+            mp_cur_consume(c,4);
+            mp_decode_stormarray(L, c, l);
+        }
+        break;
     default:    /* types that can't be idenitified by first byte value. */
         if ((c->p[0] & 0x80) == 0) {   /* positive fixnum */
             lua_pushunsigned(L,c->p[0]);
@@ -963,7 +1076,7 @@ int luaopen_create(lua_State *L) {
 ******************************************************************************/
 
 #define MIN_OPT_LEVEL 2
-#include "lrodefs.h" 
+#include "lrodefs.h"
 const LUA_REG_TYPE libmsgpack_mp_map[] =
 {
     { LSTRKEY( "pack" ), LFUNCVAL ( libmsgpack_mp_pack ) },

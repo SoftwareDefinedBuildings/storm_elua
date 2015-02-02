@@ -8,6 +8,8 @@ local ldscript = "kernelpayload.ld"
   
 -- Prepend with path
 specific_files = utils.prepend_path( specific_files, sf( "src/platform/%s", platform ) )
+specific_files = specific_files .. "../../contrib/native.c"
+
 ldscript = sf( "src/platform/%s/%s", platform, ldscript )
 
 addm{ "FOR" .. comp.cpu:upper(), 'gcc' }

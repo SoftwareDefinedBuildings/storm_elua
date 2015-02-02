@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <interface.h>
 #include <stdlib.h>
+#include "libstormarray.h"
 
 #if LUA_OPTIMIZE_MEMORY == 0
 #error libstorm can only be compiled with LTR on (optram=true)
@@ -20,23 +21,8 @@
 
 #define ARRAY_SANE_SIZE 4000
 
-enum {
-    ARR_TYPE_INT8 = 1,
-    ARR_TYPE_UINT8 = 2,
-    ARR_TYPE_INT16 = 3,
-    ARR_TYPE_UINT16 = 4,
-    ARR_TYPE_INT32 = 5
-};
-
-#define ARR_START(x) (((uint8_t*)((x)) + sizeof(storm_array_t)))
 const uint8_t arr_sizemap [] = {0, 1, 1, 2, 2, 4};
 const uint8_t arr_shiftmap [] = {0, 0, 0, 1, 1, 2};
-typedef struct
-{
-    uint8_t type;
-    uint8_t reserved;
-    uint16_t len;
-} __attribute__((packed)) storm_array_t;
 
 // Module function map
 #define MIN_OPT_LEVEL 2
@@ -62,6 +48,16 @@ static const LUA_REG_TYPE array_meta_map[] =
     { LNILKEY, LNILVAL }
 };
 
+int storm_array_nc_create(lua_State *L, int count, int type)
+{
+    storm_array_t *arr = lua_newuserdata(L, sizeof(storm_array_t) + count*arr_sizemap[type]);
+    memset(ARR_START(arr), 0, count*arr_sizemap[type]);
+    arr->type = type;
+    arr->len = count*arr_sizemap[type];
+    lua_pushrotable(L, (void*)array_meta_map);
+    lua_setmetatable(L, -2);
+    return 1;
+}
 //lua storm.array.create(count, default_element_size)
 static int arr_create(lua_State *L)
 {
@@ -186,10 +182,25 @@ static int arr_get_as(lua_State *L)
         return luaL_error(L, "out of bounds");
     }
     ptr = ARR_START(arr) + idx;
-    rv[0] = ptr[0];
-    rv[1] = ptr[1];
-    rv[2] = ptr[2];
-    rv[3] = ptr[3];
+    switch(type)
+    {
+        case GS_TYPE_INT16_BE:
+        case GS_TYPE_UINT16_BE:
+            rv[0] = ptr[1];
+            rv[1] = ptr[0];
+            break;
+        case GS_TYPE_INT32_BE:
+            rv[0] = ptr[3];
+            rv[1] = ptr[2];
+            rv[2] = ptr[1];
+            rv[3] = ptr[0];
+            break;
+        default: //little endian
+            rv[0] = ptr[0];
+            rv[1] = ptr[1];
+            rv[2] = ptr[2];
+            rv[3] = ptr[3];
+    }
     switch(type)
     {
         case ARR_TYPE_INT8:
@@ -199,12 +210,15 @@ static int arr_get_as(lua_State *L)
             lua_pushnumber(L, *((uint8_t*) &rv[0]));
             break;
         case ARR_TYPE_INT16:
+        case GS_TYPE_INT16_BE:
             lua_pushnumber(L, *((int16_t*) &rv[0]));
             break;
         case ARR_TYPE_UINT16:
+        case GS_TYPE_UINT16_BE:
             lua_pushnumber(L, *((uint16_t*) &rv[0]));
             break;
         case ARR_TYPE_INT32:
+        case GS_TYPE_INT32_BE:
             lua_pushnumber(L, *((int32_t*) &rv[0]));
             break;
         default:
@@ -256,6 +270,17 @@ static int arr_set_as(lua_State *L)
         case ARR_TYPE_UINT8:
             dstptr[0] = srcptr[0];
             break;
+        case GS_TYPE_INT16_BE:
+        case GS_TYPE_UINT16_BE:
+            dstptr[1] = srcptr[0];
+            dstptr[0] = srcptr[1];
+            break;
+        case GS_TYPE_INT32_BE:
+            dstptr[3] = srcptr[0];
+            dstptr[2] = srcptr[1];
+            dstptr[1] = srcptr[2];
+            dstptr[0] = srcptr[3];
+            break;
         default:
             return luaL_error(L, "bad array type");
     }
@@ -271,6 +296,9 @@ const LUA_REG_TYPE libstorm_array_map[] =
     { LSTRKEY( "INT16" ), LNUMVAL ( ARR_TYPE_INT16 ) },
     { LSTRKEY( "UINT16" ),LNUMVAL ( ARR_TYPE_UINT16 ) },
     { LSTRKEY( "INT32" ), LNUMVAL ( ARR_TYPE_INT32 ) },
+    { LSTRKEY( "INT16_BE" ), LNUMVAL ( GS_TYPE_INT16_BE ) },
+    { LSTRKEY( "UINT16_BE" ), LNUMVAL ( GS_TYPE_UINT16_BE ) },
+    { LSTRKEY( "INT32_BE" ), LNUMVAL ( GS_TYPE_INT32_BE ) },
     { LSTRKEY( "_arrmeta" ), LROVAL ( array_meta_map ) },
     { LNILKEY, LNILVAL }
 };
