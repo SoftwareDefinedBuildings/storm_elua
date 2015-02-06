@@ -843,6 +843,7 @@ static void libstorm_i2c_transact_callback(void* tr, int status)
     }
     luaL_unref(_cb_L, LUA_REGISTRYINDEX, t->cbref);
     luaL_unref(_cb_L, LUA_REGISTRYINDEX, t->arrayref);
+    free(t);
 }
 
 static int libstorm_io_i2c_x(lua_State *L, uint8_t iswrite)
