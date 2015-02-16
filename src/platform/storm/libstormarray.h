@@ -8,6 +8,7 @@ typedef struct
     uint8_t type;
     uint8_t reserved;
     uint16_t len;
+    uint16_t end; //index of next item
 } __attribute__((packed)) storm_array_t;
 
 enum {

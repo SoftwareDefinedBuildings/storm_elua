@@ -36,6 +36,7 @@ static int arr_get_as(lua_State *L);
 static int arr_set_as(lua_State *L);
 static int arr_get_length(lua_State *L);
 static int arr_sum(lua_State *L);
+static int arr_append(lua_State *L);
 static const LUA_REG_TYPE array_meta_map[] =
 {
  //   { LSTRKEY( "set_type" ), LFUNCVAL ( arr_set_type ) },
@@ -45,6 +46,7 @@ static const LUA_REG_TYPE array_meta_map[] =
     { LSTRKEY( "get_as" ), LFUNCVAL ( arr_get_as ) },
     { LSTRKEY( "set_as" ), LFUNCVAL ( arr_set_as ) },
     { LSTRKEY( "sum" ), LFUNCVAL ( arr_sum) },
+    { LSTRKEY( "append" ), LFUNCVAL ( arr_append) },
     { LSTRKEY( "__len" ), LFUNCVAL ( arr_get_length ) },
     { LSTRKEY( "__index" ), LROVAL ( array_meta_map ) },
     { LNILKEY, LNILVAL }
@@ -81,6 +83,7 @@ static int arr_create(lua_State *L)
     memset(ARR_START(arr), 0, size*arr_sizemap[type]);
     arr->type = type;
     arr->len = size*arr_sizemap[type];
+    arr->end = 0;
     lua_pushrotable(L, (void*)array_meta_map);
     lua_setmetatable(L, -2);
     return 1;
@@ -138,6 +141,32 @@ static int arr_sum(lua_State *L)
   return 1;
 }
 
+static int arr_set_index(storm_array_t *arr, int idx, int val){
+  if (idx >= arr->end){
+    arr->end = idx + 1;
+  }
+  switch (arr->type){
+  case ARR_TYPE_INT8:
+    ((int8_t*)ARR_START(arr))[idx] = val;
+    break;
+  case ARR_TYPE_UINT8:
+    ((uint8_t*)ARR_START(arr))[idx] = val;
+    break;
+  case ARR_TYPE_INT16:
+    ((int16_t*)ARR_START(arr))[idx] = val;
+    break;
+  case ARR_TYPE_UINT16:
+    ((uint16_t*)ARR_START(arr))[idx] = val;
+    break;
+  case ARR_TYPE_INT32:
+    ((int32_t*)ARR_START(arr))[idx] = val;
+    break;
+  default:
+    return 1;
+  }
+  return 0;
+}
+
 //lua array:set(idx, val)
 static int arr_set(lua_State *L)
 {
@@ -156,27 +185,26 @@ static int arr_set(lua_State *L)
         return luaL_error(L, "out of bounds");
     }
     idx--;
-    switch(arr->type)
-    {
-        case ARR_TYPE_INT8:
-            ((int8_t*)ARR_START(arr))[idx] = val;
-            break;
-        case ARR_TYPE_UINT8:
-            ((uint8_t*)ARR_START(arr))[idx] = val;
-            break;
-        case ARR_TYPE_INT16:
-            ((int16_t*)ARR_START(arr))[idx] = val;
-            break;
-        case ARR_TYPE_UINT16:
-            ((uint16_t*)ARR_START(arr))[idx] = val;
-            break;
-        case ARR_TYPE_INT32:
-            ((int32_t*)ARR_START(arr))[idx] = val;
-            break;
-        default:
-            return luaL_error(L, "bad array type");
+    if (arr_set_index(arr, idx, val)){
+      luaL_error(L, "bad array type");
     }
     return 0;
+}
+
+static int arr_append(lua_State *L){
+  storm_array_t *arr = lua_touserdata(L, 1);
+  int idx = arr->end;
+  int val = luaL_checknumber(L, 2);
+  if (!arr){
+      return luaL_error(L, "invalid array");
+  }
+  if (idx + 1 > (arr->len >> arr_shiftmap[arr->type])){
+      return luaL_error(L, "out of bounds");
+  }
+  if (arr_set_index(arr, idx, val)){
+    luaL_error(L, "bad array type");
+  }
+  return 0;
 }
 
 //lua array:get_as(type, byte_idx)
