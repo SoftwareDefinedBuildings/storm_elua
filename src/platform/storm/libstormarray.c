@@ -133,10 +133,17 @@ static int arr_sum(lua_State *L)
   storm_array_t *arr = lua_touserdata(L, 1);
   int len  = arr->len >> arr_shiftmap[arr->type];
   int sum = 0, i;
-  int *a = ARR_START(arr);
-  for (i = 0; i < len; i++){
-    sum += a[i];
+  void *a = ARR_START(arr);
+#define SUM(type) for (i = 0; i < len; i++){sum = sum + ((type*)a)[i];} break;
+  switch(arr->type){
+  case ARR_TYPE_INT8:   SUM(int8_t)
+  case ARR_TYPE_UINT8:  SUM(uint8_t)
+  case ARR_TYPE_INT16:  SUM(int16_t)
+  case ARR_TYPE_UINT16: SUM(uint16_t)
+  case ARR_TYPE_INT32:  SUM(int32_t)
+  default: return luaL_error(L, "bad array type");
   }
+#undef SUM
   lua_pushnumber(L, sum);
   return 1;
 }
