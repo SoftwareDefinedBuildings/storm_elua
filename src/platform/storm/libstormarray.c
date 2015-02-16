@@ -35,6 +35,7 @@ static int arr_set(lua_State *L);
 static int arr_get_as(lua_State *L);
 static int arr_set_as(lua_State *L);
 static int arr_get_length(lua_State *L);
+static int arr_sum(lua_State *L);
 static const LUA_REG_TYPE array_meta_map[] =
 {
  //   { LSTRKEY( "set_type" ), LFUNCVAL ( arr_set_type ) },
@@ -43,6 +44,7 @@ static const LUA_REG_TYPE array_meta_map[] =
     { LSTRKEY( "set" ), LFUNCVAL ( arr_set ) },
     { LSTRKEY( "get_as" ), LFUNCVAL ( arr_get_as ) },
     { LSTRKEY( "set_as" ), LFUNCVAL ( arr_set_as ) },
+    { LSTRKEY( "sum" ), LFUNCVAL ( arr_sum) },
     { LSTRKEY( "__len" ), LFUNCVAL ( arr_get_length ) },
     { LSTRKEY( "__index" ), LROVAL ( array_meta_map ) },
     { LNILKEY, LNILVAL }
@@ -122,6 +124,20 @@ static int arr_get(lua_State *L)
     }
     return 1;
 }
+
+static int arr_sum(lua_State *L)
+{
+  storm_array_t *arr = lua_touserdata(L, 1);
+  int len  = arr->len >> arr_shiftmap[arr->type];
+  int sum = 0, i;
+  int *a = ARR_START(arr);
+  for (i = 0; i < len; i++){
+    sum += a[i];
+  }
+  lua_pushnumber(L, sum);
+  return 1;
+}
+
 //lua array:set(idx, val)
 static int arr_set(lua_State *L)
 {
