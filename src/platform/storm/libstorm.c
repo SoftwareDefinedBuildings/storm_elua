@@ -60,6 +60,14 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_u32_u32_buf_u32_vptr_vptr(u
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
 }
+int32_t __attribute__((naked)) k_syscall_ex_ri32_cb_vptr_cb_vptr(uint32_t id, void* arg0, void* arg1, void* arg2, void* arg3)
+{
+    __syscall_body(ABI_ID_SYSCALL_EX);
+}
+int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_cptr(uint32_t id, uint32_t len, const char* buffer)
+{
+    __syscall_body(ABI_ID_SYSCALL_EX);
+}
 
 //Some driver specific syscalls
 //--------- GPIO
@@ -96,6 +104,11 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_u32_u32_buf_u32_vptr_vptr(u
 //---------- I2C
 #define i2c_transact(iswrite, address, flags, buffer, len, callback, r) k_syscall_ex_ri32_u32_u32_u32_buf_u32_vptr_vptr((0x500 + (iswrite)), (address), (flags), (buffer), (len), (callback), (r))
 
+//---------- Bluetooth
+#define bl_enable(on_ready, on_ready_r, on_changed, on_changed_r) k_syscall_ex_ri32_cb_vptr_cb_vptr(0x601, (on_ready), (on_ready_r), (on_changed), (on_changed_r))
+#define bl_addservice(uuid) k_syscall_ex_ri32_u32(0x602, (uuid))
+#define bl_addcharacteristic(svc_handle, uuid, on_write, on_write_r) k_syscall_ex_ri32_u32_u32_cb_vptr(0x603, (svc_handle), (uuid), (on_write), (on_write_r))
+#define bl_notify(char_handle, buffer_len, buffer) k_syscall_ex_ri32_u32_cptr(0x604, (char_handle), (buffer_len), (buffer) )
 
 static lua_State *_cb_L;
 #define MAXPINSPEC 20
@@ -895,9 +908,70 @@ static int libstorm_i2c_read(lua_State *L)
     return libstorm_io_i2c_x(L, 1);
 }
 
-static int explode(lua_State *L)
+static int bl_onready_cb_key = 0;
+static int bl_connect_cb_key = 0;
+
+static void libstorm_bl_onready_callback(void *r)
 {
-    return lua_yield(L, 0);
+    int rv;
+    const char* msg;
+    lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, bl_onready_cb_key);
+    if ((rv = lua_pcall(_cb_L, 0, 0, 0)) != 0)
+    {
+        printf("[ERROR] could not run bl onready callback (%d)\n", rv);
+        msg = lua_tostring(_cb_L, -1);
+        printf("[ERROR] msg: %s\n", msg);
+    }
+    luaL_unref(_cb_L, LUA_REGISTRYINDEX, bl_onready_cb_key);
+    bl_onready_cb_key = 0;
+}
+static void libstorm_bl_onchanged_callback(void *r, uint32_t status)
+{
+    int rv;
+    const char* msg;
+
+    lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, bl_connect_cb_key);
+    lua_pushnumber(_cb_L, status);
+    if ((rv = lua_pcall(_cb_L, 1, 0, 0)) != 0)
+    {
+        printf("[ERROR] could not run bl onchanged callback (%d)\n", rv);
+        msg = lua_tostring(_cb_L, -1);
+        printf("[ERROR] msg: %s\n", msg);
+    }
+}
+
+//onready, onconnect
+static int libstorm_bl_enable(lua_State *L)
+{
+    if (lua_gettop(L) != 2)
+    {
+        return luaL_error(L, "expected (onready, onconnectchanged)");
+    }
+    bl_connect_cb_key = luaL_ref(L, LUA_REGISTRYINDEX);
+    bl_onready_cb_key = luaL_ref(L, LUA_REGISTRYINDEX);
+    bl_enable(&libstorm_bl_onready_callback, NULL, &libstorm_bl_onchanged_callback, NULL);
+    return 0;
+}
+
+//addservice(
+static int libstorm_bl_addservice(lua_State *L)
+{
+    int handle;
+    if (lua_gettop(L) != 1)
+    {
+        return luaL_error(L, "expected (uuid)");
+    }
+    handle = bl_addservice(lua_tonumber(L, 1));
+    lua_pushnumber(L, handle);
+    return 1;
+}
+
+static int libstorm_bl_addcharacteristic(lua_State *L)
+{
+}
+
+static int libstorm_bl_notify(lua_State *L)
+{
 }
 
 // Module function map
@@ -986,7 +1060,6 @@ const LUA_REG_TYPE libstorm_os_map[] =
     { LSTRKEY( "getmacstring" ), LFUNCVAL ( libstorm_os_getmacstring ) },
     { LSTRKEY( "getipaddr" ), LFUNCVAL ( libstorm_os_getipaddr ) },
     { LSTRKEY( "getipaddrstring" ), LFUNCVAL ( libstorm_os_getipaddrstring ) },
-    { LSTRKEY( "explode" ), LFUNCVAL ( explode ) },
     { LSTRKEY( "SHIFT_0" ), LNUMVAL ( 1 ) },
     { LSTRKEY( "SHIFT_16" ), LNUMVAL ( 2 ) },
     { LSTRKEY( "SHIFT_48" ), LNUMVAL ( 3 ) },
@@ -1006,6 +1079,14 @@ const LUA_REG_TYPE libstorm_net_map[] =
     { LSTRKEY( "sendto" ), LFUNCVAL ( libstorm_net_sendto ) },
  //   { LSTRKEY( "set_recvfrom" ), LFUNCVAL ( libstorm_net_recvfrom ) },
  //   { LSTRKEY( "unset_recvfrom" ), LFUNCVAL ( libstorm_net_recvfrom ) },
+    { LNILKEY, LNILVAL }
+};
+const LUA_REG_TYPE libstorm_bl_map[] =
+{
+    { LSTRKEY( "enable" ),  LFUNCVAL ( libstorm_bl_enable ) },
+    { LSTRKEY( "addservice" ),  LFUNCVAL ( libstorm_bl_addservice ) },
+    { LSTRKEY( "addcharacteristic" ),  LFUNCVAL ( libstorm_bl_addcharacteristic ) },
+    { LSTRKEY( "notify" ),  LFUNCVAL ( libstorm_bl_notify ) },
     { LNILKEY, LNILVAL }
 };
 /*

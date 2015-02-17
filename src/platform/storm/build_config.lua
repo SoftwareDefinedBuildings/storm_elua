@@ -23,6 +23,7 @@ function get_platform_modules( board, cpu )
       array  = { lib='"array"', map = "libstorm_array_map", open = false},
       i2c  = { lib='"i2c"', map = "libstorm_i2c_map", open = false},
       n  = { lib='"n"', map = "contrib_native_map", open = false},
+      bl  = { lib='"bl"', map = "libstorm_bl_map", open = false},
   }
   return m
 end
