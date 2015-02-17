@@ -966,8 +966,33 @@ static int libstorm_bl_addservice(lua_State *L)
     return 1;
 }
 
+static void bl_write_callback(uint32_t cbref, uint32_t buflen, uint8_t *buffer)
+{
+    lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, cbref);
+    lua_pushlstring(_cb_L, (char*)buffer, buflen);
+    if ((rv = lua_pcall(_cb_L, 1, 0, 0)) != 0)
+    {
+        printf("[ERROR] could not run bl write callback (%d)\n", rv);
+        msg = lua_tostring(_cb_L, -1);
+        printf("[ERROR] msg: %s\n", msg);
+    }
+}
+//addcharacteristic(svc_handle, uuid, on_write)
 static int libstorm_bl_addcharacteristic(lua_State *L)
 {
+    int handle;
+    int svc_handle, uuid;
+    int cbref;
+    cbref = luaL_ref(L, LUA_REGISTRYINDEX); //callback
+    uuid = lua_tonumber(L, 2);
+    svc_handle = lua_tonumber(L, 1);
+    if (lua_gettop(L) != 3)
+    {
+        return luaL_error(L, "expected (handle, uuid, on_write)");
+    }
+    handle = bl_addcharacteristic(svc_handle, uuid, bl_write_callback, (void*) cbref);
+    lua_pushnumber(handle);
+    return 1;
 }
 
 static int libstorm_bl_notify(lua_State *L)
