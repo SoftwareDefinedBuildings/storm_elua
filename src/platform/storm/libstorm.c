@@ -32,7 +32,7 @@ int32_t __attribute__((naked)) k_syscall_ex_ru32_u32(uint32_t id, uint32_t arg0)
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
 }
-int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_u32_cb_vptr(uint32_t id, uint32_t arg0, uint32_t arg1, cb_t cb, void *r)
+int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_u32_cb_vptr(uint32_t id, uint32_t arg0, uint32_t arg1, void* cb, void *r)
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
 }
@@ -968,6 +968,8 @@ static int libstorm_bl_addservice(lua_State *L)
 
 static void bl_write_callback(uint32_t cbref, uint32_t buflen, uint8_t *buffer)
 {
+    int rv;
+    const char* msg;
     lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, cbref);
     lua_pushlstring(_cb_L, (char*)buffer, buflen);
     if ((rv = lua_pcall(_cb_L, 1, 0, 0)) != 0)
@@ -983,15 +985,16 @@ static int libstorm_bl_addcharacteristic(lua_State *L)
     int handle;
     int svc_handle, uuid;
     int cbref;
-    cbref = luaL_ref(L, LUA_REGISTRYINDEX); //callback
-    uuid = lua_tonumber(L, 2);
-    svc_handle = lua_tonumber(L, 1);
     if (lua_gettop(L) != 3)
     {
         return luaL_error(L, "expected (handle, uuid, on_write)");
     }
+    cbref = luaL_ref(L, LUA_REGISTRYINDEX); //callback
+    uuid = lua_tonumber(L, 2);
+    svc_handle = lua_tonumber(L, 1);
+    
     handle = bl_addcharacteristic(svc_handle, uuid, bl_write_callback, (void*) cbref);
-    lua_pushnumber(handle);
+    lua_pushnumber(L, handle);
     return 1;
 }
 
