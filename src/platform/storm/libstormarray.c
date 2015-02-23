@@ -35,6 +35,9 @@ static int arr_set(lua_State *L);
 static int arr_get_as(lua_State *L);
 static int arr_set_as(lua_State *L);
 static int arr_get_length(lua_State *L);
+static int arr_set_pstring(lua_State *L);
+static int arr_get_pstring(lua_State *L);
+static int arr_as_str(lua_State *L);
 static const LUA_REG_TYPE array_meta_map[] =
 {
  //   { LSTRKEY( "set_type" ), LFUNCVAL ( arr_set_type ) },
@@ -45,6 +48,11 @@ static const LUA_REG_TYPE array_meta_map[] =
     { LSTRKEY( "set_as" ), LFUNCVAL ( arr_set_as ) },
     { LSTRKEY( "__len" ), LFUNCVAL ( arr_get_length ) },
     { LSTRKEY( "__index" ), LROVAL ( array_meta_map ) },
+    { LSTRKEY( "get_pstring" ), LFUNCVAL ( arr_get_pstring ) },
+    { LSTRKEY( "set_pstring" ), LFUNCVAL ( arr_set_pstring ) },
+    { LSTRKEY( "as_str" ), LFUNCVAL ( arr_as_str ) },
+
+
     { LNILKEY, LNILVAL }
 };
 
@@ -237,6 +245,59 @@ static int arr_get_length(lua_State *L)
     return 1;
 }
 
+//lua array.from_string(str)
+//safe to call from C, pops off string and replaces with array
+int arr_from_str(lua_State *L)
+{
+    int top = lua_gettop(L);
+    size_t len;
+    const char* pay;
+    pay = lua_tolstring(L, -1, &len);
+    storm_array_t *arr = lua_newuserdata(L, sizeof(storm_array_t) + len);
+    memcpy(ARR_START(arr), pay, len);
+    arr->type = ARR_TYPE_UINT8;
+    arr->len = len;
+    lua_pushrotable(L, (void*)array_meta_map);
+    lua_setmetatable(L, -2);
+    lua_replace(L, top);
+    lua_settop(L, top);
+    return 1;
+}
+
+//lua arr:as_str()
+int arr_as_str(lua_State *L)
+{
+    storm_array_t *arr = lua_touserdata(L, 1);
+    lua_pushlstring(L, (char*)(ARR_START(arr)), arr->len);
+    return 1;
+}
+
+//lua: array:get_pstring(byte_index)
+int arr_get_pstring(lua_State *L)
+{
+    storm_array_t *arr = lua_touserdata(L, 1);
+    int idx = luaL_checkinteger(L, 2);
+    if (idx > arr->len) return luaL_error(L, "out of bounds");
+    int strlen = ARR_START(arr)[idx];
+    if (idx + strlen >= arr->len) return luaL_error(L, "bad string");
+    lua_pushlstring(L, (char*) (&(ARR_START(arr)[idx+1])), strlen);
+    return 1;
+}
+
+//lua: array:get_pstring(byte_index, string)
+int arr_set_pstring(lua_State *L)
+{
+    storm_array_t *arr = lua_touserdata(L, 1);
+    int idx = luaL_checkinteger(L, 2);
+    size_t strlen;
+    const char* str = lua_tolstring(L, 3, &strlen);
+    if (strlen > 255) strlen = 255;
+    if (idx + strlen >= arr->len) return luaL_error(L, "out of bounds");
+    memcpy(ARR_START(arr) + idx + 1, str, strlen);
+    ARR_START(arr)[idx] = strlen;
+    return 0;
+}
+
 //lua array:set_as(type, byte_idx, val)
 static int arr_set_as(lua_State *L)
 {
@@ -244,9 +305,11 @@ static int arr_set_as(lua_State *L)
     uint8_t* srcptr;
     uint8_t* dstptr;
     int val;
+    int type;
     storm_array_t *arr = lua_touserdata(L, 1);
-    idx = luaL_checkinteger(L, 2);
-    val = luaL_checknumber(L, 3);
+    type = luaL_checkinteger(L, 2);
+    idx = luaL_checkinteger(L, 3);
+    val = luaL_checknumber(L, 4);
     srcptr = (uint8_t*) (&val);
     if (!arr)
     {
@@ -256,9 +319,9 @@ static int arr_set_as(lua_State *L)
     {
         return luaL_error(L, "out of bounds");
     }
-    dstptr = ((uint8_t*)arr) + sizeof(storm_array_t) + idx;
+    dstptr = &(ARR_START(arr)[idx]);
 
-    switch(arr->type)
+    switch(type)
     {
         case ARR_TYPE_INT32:
             dstptr[3] = srcptr[3];
@@ -291,6 +354,7 @@ static int arr_set_as(lua_State *L)
 const LUA_REG_TYPE libstorm_array_map[] =
 {
     { LSTRKEY( "create" ), LFUNCVAL ( arr_create ) },
+    { LSTRKEY( "fromstr" ), LFUNCVAL ( arr_from_str ) },
     { LSTRKEY( "INT8" ),  LNUMVAL ( ARR_TYPE_INT8 ) },
     { LSTRKEY( "UINT8" ), LNUMVAL ( ARR_TYPE_UINT8 ) },
     { LSTRKEY( "INT16" ), LNUMVAL ( ARR_TYPE_INT16 ) },

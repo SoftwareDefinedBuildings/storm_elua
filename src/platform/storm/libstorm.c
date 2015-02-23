@@ -60,11 +60,11 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_u32_u32_buf_u32_vptr_vptr(u
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
 }
-int32_t __attribute__((naked)) k_syscall_ex_ri32_cb_vptr_cb_vptr(uint32_t id, void* arg0, void* arg1, void* arg2, void* arg3)
+int32_t __attribute__((naked)) k_syscall_ex_ri32_cb_vptr_cb_vptr_cptr_u32(uint32_t id, void* arg0, void* arg1, void* arg2, void* arg3, const char* arg4, uint32_t arg5)
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
 }
-int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_cptr(uint32_t id, uint32_t len, const char* buffer)
+int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_u32_cptr(uint32_t id, uint32_t char_handle, uint32_t len, const char* buffer)
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
 }
@@ -105,10 +105,10 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_cptr(uint32_t id, uint32_t 
 #define i2c_transact(iswrite, address, flags, buffer, len, callback, r) k_syscall_ex_ri32_u32_u32_u32_buf_u32_vptr_vptr((0x500 + (iswrite)), (address), (flags), (buffer), (len), (callback), (r))
 
 //---------- Bluetooth
-#define bl_enable(on_ready, on_ready_r, on_changed, on_changed_r) k_syscall_ex_ri32_cb_vptr_cb_vptr(0x601, (on_ready), (on_ready_r), (on_changed), (on_changed_r))
+#define bl_enable(on_ready, on_ready_r, on_changed, on_changed_r, adv, advlen) k_syscall_ex_ri32_cb_vptr_cb_vptr_cptr_u32(0x601, (on_ready), (on_ready_r), (on_changed), (on_changed_r), (adv), (advlen))
 #define bl_addservice(uuid) k_syscall_ex_ri32_u32(0x602, (uuid))
 #define bl_addcharacteristic(svc_handle, uuid, on_write, on_write_r) k_syscall_ex_ri32_u32_u32_cb_vptr(0x603, (svc_handle), (uuid), (on_write), (on_write_r))
-#define bl_notify(char_handle, buffer_len, buffer) k_syscall_ex_ri32_u32_cptr(0x604, (char_handle), (buffer_len), (buffer) )
+#define bl_notify(char_handle, buffer_len, buffer) k_syscall_ex_ri32_u32_u32_cptr(0x604, (char_handle), (buffer_len), (buffer) )
 
 static lua_State *_cb_L;
 #define MAXPINSPEC 20
@@ -943,13 +943,18 @@ static void libstorm_bl_onchanged_callback(void *r, uint32_t status)
 //onready, onconnect
 static int libstorm_bl_enable(lua_State *L)
 {
-    if (lua_gettop(L) != 2)
+    size_t len;
+    const char* advdata;
+    if (lua_gettop(L) != 3)
     {
-        return luaL_error(L, "expected (onready, onconnectchanged)");
+        return luaL_error(L, "expected (adv_data, onconnectchanged, onready)");
     }
-    bl_connect_cb_key = luaL_ref(L, LUA_REGISTRYINDEX);
+
     bl_onready_cb_key = luaL_ref(L, LUA_REGISTRYINDEX);
-    bl_enable(&libstorm_bl_onready_callback, NULL, &libstorm_bl_onchanged_callback, NULL);
+    bl_connect_cb_key = luaL_ref(L, LUA_REGISTRYINDEX);
+    advdata = lua_tolstring(L, 1, &len);
+    printf("payload len=%d\n",len);
+    bl_enable(&libstorm_bl_onready_callback, NULL, &libstorm_bl_onchanged_callback, NULL, advdata, len);
     return 0;
 }
 
@@ -998,8 +1003,18 @@ static int libstorm_bl_addcharacteristic(lua_State *L)
     return 1;
 }
 
+//Lua signature storm.bl.notify(char_handle, payload)
 static int libstorm_bl_notify(lua_State *L)
 {
+    int handle;
+    size_t paylen;
+    const char* payload;
+    handle = lua_tonumber(L, 1);
+    payload = luaL_checklstring(L, 2, &paylen);
+    if (paylen > 20)
+        return luaL_error(L, "payload must be shorter than 20 bytes");
+    bl_notify(handle, paylen, payload);
+    return 0;
 }
 
 // Module function map
