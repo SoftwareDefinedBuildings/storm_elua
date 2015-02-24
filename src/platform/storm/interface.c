@@ -173,7 +173,7 @@ void __attribute__((used)) _start2()
     printf("==[TESTSUITE COMPLETE]==\n");
     #endif
 
-    printf("Booting payload 3.0:");
+    printf("Booting payload 4.0:");
     main();
 
     // It's not technically the end of the world if main exits
