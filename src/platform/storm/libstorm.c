@@ -138,7 +138,7 @@ static const u16 pinspec_map [] =
 };
 
 // Lua: storm.io.get(pin1, pin2, ..., pinn )
-static int libstorm_io_get( lua_State *L )
+int libstorm_io_get( lua_State *L )
 {
     unsigned i;
     int pinspec;
@@ -157,7 +157,7 @@ static int libstorm_io_get( lua_State *L )
 }
 
 // Lua: storm.io.getd(pin1, pin2, ..., pinn )
-static int libstorm_io_getd( lua_State *L )
+int libstorm_io_getd( lua_State *L )
 {
     unsigned i;
     int pinspec;
@@ -176,7 +176,7 @@ static int libstorm_io_getd( lua_State *L )
 }
 
 // returns the NODE ID
-static int libstorm_os_getnodeid( lua_State *L )
+int libstorm_os_getnodeid( lua_State *L )
 {
     uint32_t rv;
     rv = sysinfo_nodeid();
@@ -185,7 +185,7 @@ static int libstorm_os_getnodeid( lua_State *L )
 }
 
 // Retrieve the MAC address as an array
-static int libstorm_os_getmac( lua_State *L )
+int libstorm_os_getmac( lua_State *L )
 {
     uint8_t mac[6];
     int i;
@@ -200,7 +200,7 @@ static int libstorm_os_getmac( lua_State *L )
 
 // Retrieve the MAC address as an (integer-formatted) string
 //TODO: handle hex string formatting
-static int libstorm_os_getmacstring( lua_State *L )
+int libstorm_os_getmacstring( lua_State *L )
 {
     uint8_t mac[6];
     static char smac[18];
@@ -211,7 +211,7 @@ static int libstorm_os_getmacstring( lua_State *L )
     return 1;
 }
 
-static int libstorm_os_getipaddr( lua_State *L )
+int libstorm_os_getipaddr( lua_State *L )
 {
     uint8_t ip[16];
     int i;
@@ -224,7 +224,7 @@ static int libstorm_os_getipaddr( lua_State *L )
     return 1;
 }
 
-static int libstorm_os_getipaddrstring( lua_State *L )
+int libstorm_os_getipaddrstring( lua_State *L )
 {
     uint8_t ip[16];
     static char sip[40];
@@ -238,7 +238,7 @@ static int libstorm_os_getipaddrstring( lua_State *L )
 
 
 // Lua: storm.io.set( value, pin1, pin2, ..., pinn )
-static int libstorm_io_set( lua_State *L )
+int libstorm_io_set( lua_State *L )
 {
     int value;
     unsigned i;
@@ -265,7 +265,7 @@ static int libstorm_io_set( lua_State *L )
 }
 
 // Lua: storm.io.set_mode( dir, pin1, pin2, ..., pinn )
-static int libstorm_io_set_mode( lua_State *L )
+int libstorm_io_set_mode( lua_State *L )
 {
     int pinspec;
     u32 dir;
@@ -290,7 +290,7 @@ static int libstorm_io_set_mode( lua_State *L )
 }
 
 // Lua: storm.io.set_pull( pullmode, pin1, pin2, ..., pinn )
-static int libstorm_io_set_pull( lua_State *L )
+int libstorm_io_set_pull( lua_State *L )
 {
     int pinspec;
     u32 dir;
@@ -325,7 +325,7 @@ static void libstorm_tmr_free_context( lua_State *L, void* ctx)
     luaL_unref(L, LUA_REGISTRYINDEX, context[1]); //function
     free(context);
 }
-static int libstorm_os_cancel( lua_State *L )
+int libstorm_os_cancel( lua_State *L )
 {
     const uint32_t *context;
     if (lua_gettop( L ) != 1)
@@ -338,7 +338,7 @@ static int libstorm_os_cancel( lua_State *L )
 }
 
 // Lua: storm.os.now(type)
-static int libstorm_os_now( lua_State *L )
+int libstorm_os_now( lua_State *L )
 {
     int type = luaL_checkint(L, 1);
     uint32_t rv;
@@ -437,32 +437,32 @@ static int libstorm_tmr_impl( lua_State *L, uint32_t periodic)
 }
 
 // Lua: storm.os.invokePeriodically( interval, function, arg0, arg1, arg2)
-static int libstorm_os_periodically(lua_State *L)
+int libstorm_os_invoke_periodically(lua_State *L)
 {
     return libstorm_tmr_impl(L, 1);
 }
 
 // Lua: storm.os.invokeLater( interval, function, arg0, arg1, arg2)
-int libstorm_os_invokeLater(lua_State *L)
+int libstorm_os_invoke_later(lua_State *L)
 {
     return libstorm_tmr_impl(L, 0);
 }
 
-static int libstorm_os_run_callback(lua_State *L)
+int libstorm_os_run_callback(lua_State *L)
 {
     _cb_L = L;
     k_run_callback();
     return 0;
 }
 
-static int libstorm_os_wait_callback(lua_State *L)
+int libstorm_os_wait_callback(lua_State *L)
 {
     _cb_L = L;
     k_wait_callback();
     return 0;
 }
 
-static int libstorm_os_kyield(lua_State *L)
+int libstorm_os_kyield(lua_State *L)
 {
     k_yield();
     return 0;
@@ -502,8 +502,8 @@ static void libstorm_net_recv_cb(void* sock_ptr, udp_recv_params_t *params, char
     }
 }
 
-// Lua: storm.net.bind(port, recv_callback)
-static int libstorm_net_bind(lua_State *L)
+// Lua: storm.net.udpsocket(port, recv_callback)
+int libstorm_net_udpsocket(lua_State *L)
 {
     storm_socket_t *sock;
     int32_t rv;
@@ -540,7 +540,7 @@ static int libstorm_net_bind(lua_State *L)
     return 1;
 }
 // Lua: storm.net.close(socket_handle)
-static int libstorm_net_close(lua_State *L)
+int libstorm_net_close(lua_State *L)
 {
     //First free the callback
     storm_socket_t *sock;
@@ -556,7 +556,7 @@ static int libstorm_net_close(lua_State *L)
     return 0;
 }
 // Lua: storm.net.sendto(socket_handle, buffer, addrstr, port)
-static int libstorm_net_sendto(lua_State *L)
+int libstorm_net_sendto(lua_State *L)
 {
     storm_socket_t *sock;
     int32_t rv;
@@ -779,15 +779,15 @@ static int libstorm_io_watch_impl(lua_State *L, int repeat)
     lua_pushlightuserdata ( L, watch);
     return 1;
 }
-static int libstorm_io_watch_single(lua_State *L)
+int libstorm_io_watch_single(lua_State *L)
 {
     return libstorm_io_watch_impl(L, 0);
 }
-static int libstorm_io_watch_all(lua_State *L)
+int libstorm_io_watch_all(lua_State *L)
 {
     return libstorm_io_watch_impl(L, 1);
 }
-static int libstorm_io_cancel_watch(lua_State *L)
+int libstorm_io_cancel_watch(lua_State *L)
 {
     io_watch_t *watch;
     if (lua_gettop(L) != 1)
@@ -817,7 +817,8 @@ static void libstorm_os_read_stdin_callback(void* r, int32_t v)
     luaL_unref(_cb_L, LUA_REGISTRYINDEX, cbindex);
 }
 //lua: storm.os.read_stdin(func(txt))
-static int libstorm_os_read_stdin(lua_State *L) {
+int libstorm_os_read_stdin(lua_State *L)
+{
     int cbindex;
     //luaL_checkfunction(L, 1);
     cbindex = luaL_ref(L, LUA_REGISTRYINDEX);
@@ -898,12 +899,12 @@ static int libstorm_io_i2c_x(lua_State *L, uint8_t iswrite)
     }
 }
 //lua storm.i2c.write(address, flags, array, function(status)) -> nil
-static int libstorm_i2c_write(lua_State *L)
+int libstorm_i2c_write(lua_State *L)
 {
     return libstorm_io_i2c_x(L, 2);
 }
 //lua storm.i2c.read(address, flags, array_or_number, function(status, array)) -> nil
-static int libstorm_i2c_read(lua_State *L)
+int libstorm_i2c_read(lua_State *L)
 {
     return libstorm_io_i2c_x(L, 1);
 }
@@ -941,7 +942,7 @@ static void libstorm_bl_onchanged_callback(void *r, uint32_t status)
 }
 
 //onready, onconnect
-static int libstorm_bl_enable(lua_State *L)
+int libstorm_bl_enable(lua_State *L)
 {
     size_t len;
     const char* advdata;
@@ -959,7 +960,7 @@ static int libstorm_bl_enable(lua_State *L)
 }
 
 //addservice(
-static int libstorm_bl_addservice(lua_State *L)
+int libstorm_bl_addservice(lua_State *L)
 {
     int handle;
     if (lua_gettop(L) != 1)
@@ -985,7 +986,7 @@ static void bl_write_callback(uint32_t cbref, uint32_t buflen, uint8_t *buffer)
     }
 }
 //addcharacteristic(svc_handle, uuid, on_write)
-static int libstorm_bl_addcharacteristic(lua_State *L)
+int libstorm_bl_addcharacteristic(lua_State *L)
 {
     int handle;
     int svc_handle, uuid;
@@ -1004,7 +1005,7 @@ static int libstorm_bl_addcharacteristic(lua_State *L)
 }
 
 //Lua signature storm.bl.notify(char_handle, payload)
-static int libstorm_bl_notify(lua_State *L)
+int libstorm_bl_notify(lua_State *L)
 {
     int handle;
     size_t paylen;
@@ -1088,8 +1089,8 @@ const LUA_REG_TYPE libstorm_i2c_map[] =
 
 const LUA_REG_TYPE libstorm_os_map[] =
 {
-    { LSTRKEY( "invokePeriodically" ), LFUNCVAL ( libstorm_os_periodically ) },
-    { LSTRKEY( "invokeLater" ),  LFUNCVAL ( libstorm_os_invokeLater ) },
+    { LSTRKEY( "invokePeriodically" ), LFUNCVAL ( libstorm_os_invoke_periodically ) },
+    { LSTRKEY( "invokeLater" ),  LFUNCVAL ( libstorm_os_invoke_later ) },
     { LSTRKEY( "cancel" ), LFUNCVAL ( libstorm_os_cancel ) },
     { LSTRKEY( "now" ), LFUNCVAL ( libstorm_os_now ) },
     { LSTRKEY( "run_callback" ), LFUNCVAL ( libstorm_os_run_callback ) },
@@ -1117,7 +1118,7 @@ const LUA_REG_TYPE libstorm_os_map[] =
 };
 const LUA_REG_TYPE libstorm_net_map[] =
 {
-    { LSTRKEY( "udpsocket" ),  LFUNCVAL ( libstorm_net_bind ) },
+    { LSTRKEY( "udpsocket" ),  LFUNCVAL ( libstorm_net_udpsocket ) },
     { LSTRKEY( "close" ), LFUNCVAL ( libstorm_net_close ) },
     { LSTRKEY( "sendto" ), LFUNCVAL ( libstorm_net_sendto ) },
  //   { LSTRKEY( "set_recvfrom" ), LFUNCVAL ( libstorm_net_recvfrom ) },
