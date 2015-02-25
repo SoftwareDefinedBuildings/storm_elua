@@ -28,6 +28,8 @@ int storm_array_nc_create(lua_State *L, int count, int type);
 int array_get(storm_array_t *arr, int idx);
 int array_set(storm_array_t *arr, int idx, int val);
 int array_get_length(storm_array_t *arr);
+int array_get_as(storm_array_t *arr, int type, int idx);
+int array_get_as2(storm_array_t *arr, int type, int idx, int *err);
 
 int arr_as_str(lua_State *L);
 int arr_get_pstring(lua_State *L);
