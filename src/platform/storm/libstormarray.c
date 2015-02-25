@@ -35,9 +35,6 @@ static int arr_set(lua_State *L);
 static int arr_get_as(lua_State *L);
 static int arr_set_as(lua_State *L);
 static int arr_get_length(lua_State *L);
-static int arr_set_pstring(lua_State *L);
-static int arr_get_pstring(lua_State *L);
-static int arr_as_str(lua_State *L);
 static const LUA_REG_TYPE array_meta_map[] =
 {
  //   { LSTRKEY( "set_type" ), LFUNCVAL ( arr_set_type ) },
@@ -91,6 +88,26 @@ static int arr_create(lua_State *L)
     lua_setmetatable(L, -2);
     return 1;
 }
+
+int array_get(storm_array_t *arr, int idx){
+  switch(arr->type)
+    {
+    case ARR_TYPE_INT8:
+      return ((int8_t*)ARR_START(arr))[idx];
+    case ARR_TYPE_UINT8:
+      return ((uint8_t*)ARR_START(arr))[idx];
+    case ARR_TYPE_INT16:
+      return ((int16_t*)ARR_START(arr))[idx];
+    case ARR_TYPE_UINT16:
+      return ((uint16_t*)ARR_START(arr))[idx];
+    case ARR_TYPE_INT32:
+      return ((int32_t*)ARR_START(arr))[idx];
+    default:
+      printf("error: storm array - invalid type"); //?
+      return 0;
+    }
+}
+
 //lua array:get(idx)
 static int arr_get(lua_State *L)
 {
@@ -130,6 +147,31 @@ static int arr_get(lua_State *L)
     }
     return 1;
 }
+
+int array_set(storm_array_t *arr, int idx, int val){
+  switch(arr->type)
+    {
+    case ARR_TYPE_INT8:
+      ((int8_t*)ARR_START(arr))[idx] = val;
+      break;
+    case ARR_TYPE_UINT8:
+      ((uint8_t*)ARR_START(arr))[idx] = val;
+      break;
+    case ARR_TYPE_INT16:
+      ((int16_t*)ARR_START(arr))[idx] = val;
+      break;
+    case ARR_TYPE_UINT16:
+      ((uint16_t*)ARR_START(arr))[idx] = val;
+      break;
+    case ARR_TYPE_INT32:
+      ((int32_t*)ARR_START(arr))[idx] = val;
+      break;
+    default:
+      return 0;
+    }
+  return 1;
+}
+
 //lua array:set(idx, val)
 static int arr_set(lua_State *L)
 {
@@ -148,34 +190,64 @@ static int arr_set(lua_State *L)
         return luaL_error(L, "out of bounds");
     }
     idx--;
-    switch(arr->type)
-    {
-        case ARR_TYPE_INT8:
-            ((int8_t*)ARR_START(arr))[idx] = val;
-            break;
-        case ARR_TYPE_UINT8:
-            ((uint8_t*)ARR_START(arr))[idx] = val;
-            break;
-        case ARR_TYPE_INT16:
-            ((int16_t*)ARR_START(arr))[idx] = val;
-            break;
-        case ARR_TYPE_UINT16:
-            ((uint16_t*)ARR_START(arr))[idx] = val;
-            break;
-        case ARR_TYPE_INT32:
-            ((int32_t*)ARR_START(arr))[idx] = val;
-            break;
-        default:
-            return luaL_error(L, "bad array type");
+    if (! array_set(arr, idx, val)){
+      return luaL_error(L, "bad array type");
     }
     return 0;
+}
+
+int array_get_as2(storm_array_t *arr, int type, int idx, int *err)
+{
+  uint8_t rv [] __attribute__((aligned(4))) = {0,0,0,0};
+  uint8_t* ptr = ARR_START(arr) + idx;
+  *err = 0;
+  switch(type){
+  case GS_TYPE_INT16_BE:
+  case GS_TYPE_UINT16_BE:
+    rv[0] = ptr[1];
+    rv[1] = ptr[0];
+    break;
+  case GS_TYPE_INT32_BE:
+    rv[0] = ptr[3];
+    rv[1] = ptr[2];
+    rv[2] = ptr[1];
+    rv[3] = ptr[0];
+    break;
+  default: //little endian
+    rv[0] = ptr[0];
+    rv[1] = ptr[1];
+    rv[2] = ptr[2];
+    rv[3] = ptr[3];
+  }
+  switch(type){
+  case ARR_TYPE_INT8:
+    return *((int8_t*) &rv[0]);
+  case ARR_TYPE_UINT8:
+    return *((uint8_t*) &rv[0]);
+  case ARR_TYPE_INT16:
+  case GS_TYPE_INT16_BE:
+    return *((int16_t*) &rv[0]);
+  case ARR_TYPE_UINT16:
+  case GS_TYPE_UINT16_BE:
+    return *((uint16_t*) &rv[0]);
+  case ARR_TYPE_INT32:
+  case GS_TYPE_INT32_BE:
+    return *((int32_t*) &rv[0]);
+  default:
+    *err = 1;
+    return 0;
+  }
+}
+
+int array_get_as(storm_array_t *arr, int type, int idx){
+  int _;
+  return array_get_as2(arr, type, idx, &_);
 }
 
 //lua array:get_as(type, byte_idx)
 static int arr_get_as(lua_State *L)
 {
     int idx;
-    uint8_t* ptr;
     int type;
     uint8_t rv [] __attribute__((aligned(4))) = {0,0,0,0};
     storm_array_t *arr = lua_touserdata(L, 1);
@@ -189,59 +261,23 @@ static int arr_get_as(lua_State *L)
     {
         return luaL_error(L, "out of bounds");
     }
-    ptr = ARR_START(arr) + idx;
-    switch(type)
-    {
-        case GS_TYPE_INT16_BE:
-        case GS_TYPE_UINT16_BE:
-            rv[0] = ptr[1];
-            rv[1] = ptr[0];
-            break;
-        case GS_TYPE_INT32_BE:
-            rv[0] = ptr[3];
-            rv[1] = ptr[2];
-            rv[2] = ptr[1];
-            rv[3] = ptr[0];
-            break;
-        default: //little endian
-            rv[0] = ptr[0];
-            rv[1] = ptr[1];
-            rv[2] = ptr[2];
-            rv[3] = ptr[3];
+    int err;
+    int val = array_get_as2(arr, type, idx, &err);
+    if (err){
+      return luaL_error(L, "bad array type");
     }
-    switch(type)
-    {
-        case ARR_TYPE_INT8:
-            lua_pushnumber(L, *((int8_t*) &rv[0]));
-            break;
-        case ARR_TYPE_UINT8:
-            lua_pushnumber(L, *((uint8_t*) &rv[0]));
-            break;
-        case ARR_TYPE_INT16:
-        case GS_TYPE_INT16_BE:
-            lua_pushnumber(L, *((int16_t*) &rv[0]));
-            break;
-        case ARR_TYPE_UINT16:
-        case GS_TYPE_UINT16_BE:
-            lua_pushnumber(L, *((uint16_t*) &rv[0]));
-            break;
-        case ARR_TYPE_INT32:
-        case GS_TYPE_INT32_BE:
-            lua_pushnumber(L, *((int32_t*) &rv[0]));
-            break;
-        default:
-            return luaL_error(L, "bad array type");
-    }
-    return 1;
+    return val;
+}
+
+int array_get_length(storm_array_t *arr){
+  return arr->len >> arr_shiftmap[arr->type];
 }
 
 //lua #array
 static int arr_get_length(lua_State *L)
 {
-    int count;
     storm_array_t *arr = lua_touserdata(L, 1);
-    count = arr->len >> arr_shiftmap[arr->type];
-    lua_pushnumber(L, count);
+    lua_pushnumber(L, array_get_length(arr));
     return 1;
 }
 
@@ -271,6 +307,7 @@ int arr_as_str(lua_State *L)
     lua_pushlstring(L, (char*)(ARR_START(arr)), arr->len);
     return 1;
 }
+
 
 //lua: array:get_pstring(byte_index)
 int arr_get_pstring(lua_State *L)
