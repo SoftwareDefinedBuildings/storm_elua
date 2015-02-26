@@ -27,17 +27,18 @@ const uint8_t arr_shiftmap [] = {0, 0, 0, 1, 1, 2};
 // Module function map
 #define MIN_OPT_LEVEL 2
 #include "lrodefs.h"
-static int arr_create(lua_State *L);
-static int arr_set_type(lua_State *L);
-static int arr_get_type(lua_State *L);
-static int arr_get(lua_State *L);
-static int arr_set(lua_State *L);
-static int arr_get_as(lua_State *L);
-static int arr_set_as(lua_State *L);
-static int arr_get_length(lua_State *L);
-static int arr_set_pstring(lua_State *L);
-static int arr_get_pstring(lua_State *L);
-static int arr_as_str(lua_State *L);
+int arr_create(lua_State *L);
+int arr_set_type(lua_State *L);
+int arr_get_type(lua_State *L);
+int arr_get(lua_State *L);
+int arr_set(lua_State *L);
+int arr_get_as(lua_State *L);
+int arr_set_as(lua_State *L);
+int arr_get_length(lua_State *L);
+int arr_set_pstring(lua_State *L);
+int arr_get_pstring(lua_State *L);
+int arr_as_str(lua_State *L);
+
 static const LUA_REG_TYPE array_meta_map[] =
 {
  //   { LSTRKEY( "set_type" ), LFUNCVAL ( arr_set_type ) },
@@ -56,6 +57,9 @@ static const LUA_REG_TYPE array_meta_map[] =
     { LNILKEY, LNILVAL }
 };
 
+/**
+ * This function can be called directly, without using lua_call
+ */
 int storm_array_nc_create(lua_State *L, int count, int type)
 {
     storm_array_t *arr = lua_newuserdata(L, sizeof(storm_array_t) + count*arr_sizemap[type]);
@@ -67,7 +71,7 @@ int storm_array_nc_create(lua_State *L, int count, int type)
     return 1;
 }
 //lua storm.array.create(count, default_element_size)
-static int arr_create(lua_State *L)
+int arr_create(lua_State *L)
 {
     uint32_t size = luaL_checkinteger(L, 1);
     uint32_t type = ARR_TYPE_INT32;
@@ -92,7 +96,7 @@ static int arr_create(lua_State *L)
     return 1;
 }
 //lua array:get(idx)
-static int arr_get(lua_State *L)
+int arr_get(lua_State *L)
 {
     int idx;
     uint16_t count;
@@ -131,7 +135,7 @@ static int arr_get(lua_State *L)
     return 1;
 }
 //lua array:set(idx, val)
-static int arr_set(lua_State *L)
+int arr_set(lua_State *L)
 {
     int idx;
     uint16_t count;
@@ -172,7 +176,7 @@ static int arr_set(lua_State *L)
 }
 
 //lua array:get_as(type, byte_idx)
-static int arr_get_as(lua_State *L)
+int arr_get_as(lua_State *L)
 {
     int idx;
     uint8_t* ptr;
@@ -236,7 +240,7 @@ static int arr_get_as(lua_State *L)
 }
 
 //lua #array
-static int arr_get_length(lua_State *L)
+int arr_get_length(lua_State *L)
 {
     int count;
     storm_array_t *arr = lua_touserdata(L, 1);
@@ -299,7 +303,7 @@ int arr_set_pstring(lua_State *L)
 }
 
 //lua array:set_as(type, byte_idx, val)
-static int arr_set_as(lua_State *L)
+int arr_set_as(lua_State *L)
 {
     int idx;
     uint8_t* srcptr;
