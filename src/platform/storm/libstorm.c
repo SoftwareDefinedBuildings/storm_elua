@@ -296,43 +296,128 @@ int libstorm_os_delroute( lua_State *L )
 
 int libstorm_os_getroute( lua_State *L )
 {
+    // this is a packed version of the route_entry struct from BLIP
+    // uint8_t route key, uint8_t prefix[16], uint8_t prefix length, uint8_t next_hop[16], uint8_t ifindex = 35 bytes
+    uint8_t routeentry[35];
     uint8_t prefix[16];
     static char prefix_s[40];
-    int route_key;
+    uint8_t nexthop[16];
+    uint8_t route_key;
+    uint8_t prefixlen;
+    uint8_t ifindex;
     char *errparam = "expected (keyindex)";
     if (lua_gettop(L) != 1) return luaL_error(L, errparam);
 
     route_key = luaL_checknumber(L, 1);
-    routingtable_getroute(route_key, (uint32_t)&prefix);
+    routingtable_getroute(route_key, (uint32_t)&routeentry);
+    { // parse route entry
+        int i;
+        route_key = routeentry[0];
+        prefixlen = routeentry[17];
+        ifindex = routeentry[34];
+        for (i=0;i<16;i++)
+        {
+            prefix[i] = routeentry[1+i];
+        }
+        for (i=0;i<16;i++)
+        {
+            nexthop[i] = routeentry[18+i];
+        }
+
+    }
+    lua_createtable(L, 0, 5);
+    lua_pushstring(L, "route_key");
+    lua_pushnumber(L, route_key);
+    lua_settable(L, 2);
+
+    lua_pushstring(L, "prefix");
     snprintf(prefix_s, 40, "%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x",
                  prefix[0], prefix[1], prefix[2], prefix[3], prefix[4], prefix[5], prefix[6], prefix[7],
                  prefix[8], prefix[9], prefix[10], prefix[11], prefix[12], prefix[13], prefix[14], prefix[15]);
     lua_pushstring(L, prefix_s);
+    lua_settable(L, 2);
+
+    lua_pushstring(L, "prefixlen");
+    lua_pushnumber(L, prefixlen);
+    lua_settable(L, 2);
+
+    lua_pushstring(L, "next_hop");
+    snprintf(prefix_s, 40, "%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x",
+                 nexthop[0], nexthop[1], nexthop[2], nexthop[3], nexthop[4], nexthop[5], nexthop[6], nexthop[7],
+                 nexthop[8], nexthop[9], nexthop[10], nexthop[11], nexthop[12], nexthop[13], nexthop[14], nexthop[15]);
+    lua_pushstring(L, prefix_s);
+    lua_settable(L, 2);
+
+    lua_pushstring(L, "ifindex");
+    lua_pushnumber(L, ifindex);
+    lua_settable(L, 2);
     return 1;
 }
 
 int libstorm_os_lookuproute( lua_State *L )
 {
-    const char* prefix;
-    size_t prefixlen;
-    uint8_t buffer[16];
+    uint8_t routeentry[35];
+    const char *inprefix;
+    uint8_t prefix[16];
     static char prefix_s[40];
+    uint8_t nexthop[16];
+    uint8_t route_key;
+    uint8_t prefixlen;
+    uint8_t ifindex;
     char *errparam = "expected (prefix, prefix len)";
     if (lua_gettop(L) != 2) return luaL_error(L, errparam);
     if (lua_isnil(L, 1))
     {
-        prefix = NULL;
+        inprefix = NULL;
     }
     else
     {
-        prefix = luaL_checkstring(L, 1);
+        inprefix = luaL_checkstring(L, 1);
     }
     prefixlen = luaL_checknumber(L, 2);
-    routingtable_lookuproute(prefix, prefixlen, (uint32_t)&buffer);
+    routingtable_lookuproute(inprefix, prefixlen, (uint32_t)&routeentry);
+
+    { // parse route entry
+        int i;
+        route_key = routeentry[0];
+        prefixlen = routeentry[17];
+        ifindex = routeentry[34];
+        for (i=0;i<16;i++)
+        {
+            prefix[i] = routeentry[1+i];
+        }
+        for (i=0;i<16;i++)
+        {
+            nexthop[i] = routeentry[18+i];
+        }
+
+    }
+    lua_createtable(L, 0, 5);
+    lua_pushstring(L, "route_key");
+    lua_pushnumber(L, route_key);
+    lua_settable(L, 3);
+
+    lua_pushstring(L, "prefix");
     snprintf(prefix_s, 40, "%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x",
-                 buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-                 buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15]);
+                 prefix[0], prefix[1], prefix[2], prefix[3], prefix[4], prefix[5], prefix[6], prefix[7],
+                 prefix[8], prefix[9], prefix[10], prefix[11], prefix[12], prefix[13], prefix[14], prefix[15]);
     lua_pushstring(L, prefix_s);
+    lua_settable(L, 3);
+
+    lua_pushstring(L, "prefixlen");
+    lua_pushnumber(L, prefixlen);
+    lua_settable(L, 3);
+
+    lua_pushstring(L, "next_hop");
+    snprintf(prefix_s, 40, "%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x",
+                 nexthop[0], nexthop[1], nexthop[2], nexthop[3], nexthop[4], nexthop[5], nexthop[6], nexthop[7],
+                 nexthop[8], nexthop[9], nexthop[10], nexthop[11], nexthop[12], nexthop[13], nexthop[14], nexthop[15]);
+    lua_pushstring(L, prefix_s);
+    lua_settable(L, 3);
+
+    lua_pushstring(L, "ifindex");
+    lua_pushnumber(L, ifindex);
+    lua_settable(L, 3);
     return 1;
 }
 
