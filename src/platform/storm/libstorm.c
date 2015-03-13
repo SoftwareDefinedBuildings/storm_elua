@@ -122,6 +122,7 @@ int32_t __attribute__((naked)) k_syscall_ex_rcptr_u32_u32(uint32_t id, const cha
 #define routingtable_delroute(key) k_syscall_ex_ri32_u32(0x702, (key))
 #define routingtable_getroute(key, buffer) k_syscall_ex_ri32_u32_u32(0x703, (key), (buffer))
 #define routingtable_lookuproute(prefix, prefix_len, buffer) k_syscall_ex_rcptr_u32_u32(0x704, (prefix), (prefix_len), (buffer))
+#define routingtable_gettable(size, buffer) k_syscall_ex_ri32_u32_u32(0x705, (size), (buffer))
 
 static lua_State *_cb_L;
 #define MAXPINSPEC 20
@@ -418,6 +419,71 @@ int libstorm_os_lookuproute( lua_State *L )
     lua_pushstring(L, "ifindex");
     lua_pushnumber(L, ifindex);
     lua_settable(L, 3);
+    return 1;
+}
+
+int libstorm_os_gettable( lua_State *L )
+{
+    int tablesize = 0;
+    int i;
+    uint8_t table[35*20]; // max possible size of routing table
+    uint8_t prefix[16];
+    uint8_t nexthop[16];
+    uint8_t route_key;
+    uint8_t prefixlen;
+    uint8_t ifindex;
+    static char prefix_s[40];
+
+    routingtable_gettable((uint32_t)&tablesize, (uint32_t) table);
+    lua_createtable(L, tablesize, 0);
+    for (i=0; i<tablesize; i++)
+    {
+        int j;
+        route_key = (table+i*35)[0];
+        prefixlen = (table+i*35)[17];
+        ifindex = (table+i*35)[34];
+        for (j=0;j<16;j++)
+        {
+            prefix[j] = (table+i*35)[1+j];
+        }
+        for (j=0;j<16;j++)
+        {
+            nexthop[j] = (table+i*35)[18+j];
+        }
+
+        // push array index
+        lua_pushnumber(L, i+1); // arrays start at 1 in Lua
+
+        lua_createtable(L, 0, 5);
+        lua_pushstring(L, "route_key");
+        lua_pushnumber(L, route_key);
+        lua_settable(L, 3);
+
+        lua_pushstring(L, "prefix");
+        snprintf(prefix_s, 40, "%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x",
+                     prefix[0], prefix[1], prefix[2], prefix[3], prefix[4], prefix[5], prefix[6], prefix[7],
+                     prefix[8], prefix[9], prefix[10], prefix[11], prefix[12], prefix[13], prefix[14], prefix[15]);
+        lua_pushstring(L, prefix_s);
+        lua_settable(L, 3);
+
+        lua_pushstring(L, "prefixlen");
+        lua_pushnumber(L, prefixlen);
+        lua_settable(L, 3);
+
+        lua_pushstring(L, "next_hop");
+        snprintf(prefix_s, 40, "%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x",
+                     nexthop[0], nexthop[1], nexthop[2], nexthop[3], nexthop[4], nexthop[5], nexthop[6], nexthop[7],
+                     nexthop[8], nexthop[9], nexthop[10], nexthop[11], nexthop[12], nexthop[13], nexthop[14], nexthop[15]);
+        lua_pushstring(L, prefix_s);
+        lua_settable(L, 3);
+
+        lua_pushstring(L, "ifindex");
+        lua_pushnumber(L, ifindex);
+        lua_settable(L, 3);
+
+        lua_settable(L, 1);
+    }
+
     return 1;
 }
 
@@ -1293,6 +1359,7 @@ const LUA_REG_TYPE libstorm_os_map[] =
     { LSTRKEY( "delroute" ), LFUNCVAL ( libstorm_os_delroute ) },
     { LSTRKEY( "getroute" ), LFUNCVAL ( libstorm_os_getroute ) },
     { LSTRKEY( "lookuproute" ), LFUNCVAL ( libstorm_os_lookuproute ) },
+    { LSTRKEY( "gettable" ), LFUNCVAL ( libstorm_os_gettable ) },
     { LSTRKEY( "ROUTE_IFACE_ALL" ), LNUMVAL ( 0 ) },
     { LSTRKEY( "ROUTE_IFACE_154" ), LNUMVAL ( 1 ) },
     { LSTRKEY( "ROUTE_IFACE_PPP" ), LNUMVAL ( 2 ) },
