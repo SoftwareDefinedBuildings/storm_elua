@@ -68,7 +68,10 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_u32_cptr(uint32_t id, uint3
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
 }
-
+void* __attribute__((naked)) k_syscall_ex_rvoid(uint32_t id)
+{
+    __syscall_body(ABI_ID_SYSCALL_EX);
+}
 //Some driver specific syscalls
 //--------- GPIO
 #define simplegpio_set_mode(dir,pinspec) k_syscall_ex_ri32_u32_u32(0x101,(dir),(pinspec))
@@ -92,6 +95,8 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_u32_cptr(uint32_t id, uint3
 #define udp_close(sockid) k_syscall_ex_ri32_u32(0x303, (sockid))
 #define udp_sendto(sockid, buffer, bufferlen, addr, port) k_syscall_ex_ri32_cptr_u32_cptr_u32(0x304, (sockid), (buffer), (bufferlen), (addr), (port))
 #define udp_set_recvfrom(sockid, cb, r) k_syscall_ex_ri32_u32_cb_vptr(0x305, (sockid), (cb), (r))
+#define udp_get_blipstats() k_syscall_ex_rvoid(0x306)
+
 //#define udp_unset_recvfrom(sockid) k_syscall_ex_ri32_u32(0x306, (sockid))
 
 //---------- SysInfo
@@ -912,6 +917,12 @@ int libstorm_i2c_read(lua_State *L)
 static int bl_onready_cb_key = 0;
 static int bl_connect_cb_key = 0;
 
+static int libstorm_net_stats(lua_State *L)
+{
+    void* blipstats = udp_get_blipstats();
+    lua_pushlstring(L, blipstats, 20);
+    return 1;
+}
 static void libstorm_bl_onready_callback(void *r)
 {
     int rv;
@@ -1054,7 +1065,7 @@ const LUA_REG_TYPE libstorm_io_map[] =
     { LSTRKEY( "GP0"), LNUMVAL ( 20 ) }, /* GP0 pin 75 LED */
     { LSTRKEY( "OUTPUT" ), LNUMVAL(0) },
     { LSTRKEY( "INPUT" ), LNUMVAL(1) },
-    { LSTRKEY( "PERIPHERAL" ), LNUMVAL(2) },
+    { LSTRKEY( "ANALOG" ), LNUMVAL(2) },
     { LSTRKEY( "LOW" ), LNUMVAL(0) },
     { LSTRKEY( "HIGH" ), LNUMVAL(1) },
     { LSTRKEY( "TOGGLE" ), LNUMVAL(2) },
@@ -1121,6 +1132,7 @@ const LUA_REG_TYPE libstorm_net_map[] =
     { LSTRKEY( "udpsocket" ),  LFUNCVAL ( libstorm_net_udpsocket ) },
     { LSTRKEY( "close" ), LFUNCVAL ( libstorm_net_close ) },
     { LSTRKEY( "sendto" ), LFUNCVAL ( libstorm_net_sendto ) },
+    { LSTRKEY( "stats" ), LFUNCVAL ( libstorm_net_stats )},
  //   { LSTRKEY( "set_recvfrom" ), LFUNCVAL ( libstorm_net_recvfrom ) },
  //   { LSTRKEY( "unset_recvfrom" ), LFUNCVAL ( libstorm_net_recvfrom ) },
     { LNILKEY, LNILVAL }
