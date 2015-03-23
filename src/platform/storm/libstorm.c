@@ -105,6 +105,7 @@ int32_t __attribute__((naked)) k_syscall_ex_rcptr_u32_u32(uint32_t id, const cha
 #define udp_sendto(sockid, buffer, bufferlen, addr, port) k_syscall_ex_ri32_cptr_u32_cptr_u32(0x304, (sockid), (buffer), (bufferlen), (addr), (port))
 #define udp_set_recvfrom(sockid, cb, r) k_syscall_ex_ri32_u32_cb_vptr(0x305, (sockid), (cb), (r))
 #define udp_get_blipstats() k_syscall_ex_rvoid(0x306)
+#define udp_get_retrystats() k_syscall_ex_rvoid(0x307)
 
 //#define udp_unset_recvfrom(sockid) k_syscall_ex_ri32_u32(0x306, (sockid))
 
@@ -1178,6 +1179,29 @@ static int libstorm_net_stats(lua_State *L)
     lua_pushlstring(L, blipstats, 20);
     return 1;
 }
+static int libstorm_net_retry_stats(lua_State *L)
+{
+    storm_array_t *arr;
+    void* retrystats = udp_get_retrystats();
+
+    // retrystats is
+    // struct
+    // {
+    //     uint8_t pkt_cnt[512];
+    //     uint8_t tx_cnt[512];
+    // } __attribute__((packed));
+
+    // pkt_cnt
+    storm_array_nc_create(L, 512, ARR_TYPE_UINT8);
+    arr = lua_touserdata(L, -1);
+    memcpy(ARR_START(arr), retrystats, 512 * sizeof(uint8_t));
+
+    // tx_cnt
+    storm_array_nc_create(L, 512, ARR_TYPE_UINT8);
+    arr = lua_touserdata(L, -1);
+    memcpy(ARR_START(arr), retrystats+512, 512 * sizeof(uint8_t));
+    return 2;
+}
 static void libstorm_bl_onready_callback(void *r)
 {
     int rv;
@@ -1405,6 +1429,7 @@ const LUA_REG_TYPE libstorm_net_map[] =
     { LSTRKEY( "close" ), LFUNCVAL ( libstorm_net_close ) },
     { LSTRKEY( "sendto" ), LFUNCVAL ( libstorm_net_sendto ) },
     { LSTRKEY( "stats" ), LFUNCVAL ( libstorm_net_stats )},
+    { LSTRKEY( "retrystats" ), LFUNCVAL ( libstorm_net_retry_stats )},
  //   { LSTRKEY( "set_recvfrom" ), LFUNCVAL ( libstorm_net_recvfrom ) },
  //   { LSTRKEY( "unset_recvfrom" ), LFUNCVAL ( libstorm_net_recvfrom ) },
     { LNILKEY, LNILVAL }
