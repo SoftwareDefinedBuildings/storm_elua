@@ -518,7 +518,7 @@ void mp_encode_stormarray(lua_State *L, mp_buf *buf) {
     uint32_t len = 4;
 
     // get the stormarray off the stack
-    storm_array_t *arr = lua_touserdata(L, 1);
+    storm_array_t *arr = lua_touserdata(L, -1);
 
     // increase len by length of data in stormarray
     len += arr->len;
