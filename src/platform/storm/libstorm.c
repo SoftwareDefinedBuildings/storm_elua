@@ -1175,18 +1175,18 @@ int libstorm_i2c_read(lua_State *L)
 static int bl_onready_cb_key = 0;
 static int bl_connect_cb_key = 0;
 
-static int libstorm_net_stats(lua_State *L)
+int libstorm_net_stats(lua_State *L)
 {
     void* blipstats = udp_get_blipstats();
     lua_pushlstring(L, blipstats, 20);
     return 1;
 }
-static int libstorm_net_clear_stats(lua_State *L)
+int libstorm_net_clear_stats(lua_State *L)
 {
     udp_clear_blipstats();
     return 0;
 }
-static int libstorm_net_retry_stats(lua_State *L)
+int libstorm_net_retry_stats(lua_State *L)
 {
     storm_array_t *arr;
     void* retrystats = udp_get_retrystats();
@@ -1209,7 +1209,7 @@ static int libstorm_net_retry_stats(lua_State *L)
     memcpy(ARR_START(arr), retrystats+256, 256 * sizeof(uint8_t));
     return 2;
 }
-static int libstorm_net_clear_retry_stats(lua_State *L)
+int libstorm_net_clear_retry_stats(lua_State *L)
 {
     udp_clear_retrystats();
     return 0;
