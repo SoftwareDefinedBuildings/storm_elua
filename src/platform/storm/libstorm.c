@@ -745,7 +745,9 @@ typedef struct
     uint32_t buflen;
     uint8_t src_address [16];
     uint32_t port;
-} udp_recv_params_t;
+    uint8_t lqi;
+    uint8_t rssi;
+} __attribute__((__packed__)) udp_recv_params_t;
 //lua callback signature recv(data, address, port)
 static void libstorm_net_recv_cb(void* sock_ptr, udp_recv_params_t *params, char* addr)
 {
@@ -757,7 +759,9 @@ static void libstorm_net_recv_cb(void* sock_ptr, udp_recv_params_t *params, char
     lua_pushlstring(_cb_L, (char*)params->buffer, params->buflen);
     lua_pushstring(_cb_L, addr); //addr is in p form
     lua_pushnumber(_cb_L, params->port);
-    if ((rv = lua_pcall(_cb_L, 3, 0, 0)) != 0)
+    lua_pushnumber(_cb_L, params->lqi);
+    lua_pushnumber(_cb_L, params->rssi);
+    if ((rv = lua_pcall(_cb_L, 5, 0, 0)) != 0)
     {
         printf("[ERROR] could not run net.recv callback (%d)\n", rv);
         msg = lua_tostring(_cb_L, -1);
