@@ -80,7 +80,18 @@ int32_t __attribute__((naked)) k_syscall_ex_rcptr_u32_u32(uint32_t id, const cha
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
 }
-
+int32_t __attribute__((naked)) k_syscall_ex_ri32_cptr_u32_cptr_cptr(uint32_t id, const char* d, uint32_t a, const char *b, char* c)
+{
+    __syscall_body(ABI_ID_SYSCALL_EX);
+}
+int32_t __attribute__((naked)) k_syscall_ex_ri32_cptr(uint32_t id, char *b)
+{
+    __syscall_body(ABI_ID_SYSCALL_EX);
+}
+int32_t __attribute__((naked)) k_syscall_ex_ri32_vptr_vptr_uint32_vptr_vptr(uint32_t id, void* a, void* b, uint32_t c, void *d, void *e)
+{
+    __syscall_body(ABI_ID_SYSCALL_EX);
+}
 //Some driver specific syscalls
 //--------- GPIO
 #define simplegpio_set_mode(dir,pinspec) k_syscall_ex_ri32_u32_u32(0x101,(dir),(pinspec))
@@ -113,8 +124,7 @@ int32_t __attribute__((naked)) k_syscall_ex_rcptr_u32_u32(uint32_t id, const cha
 #define sysinfo_getmac(buffer) k_syscall_ex_ru32_u32(0x402, (buffer))
 #define sysinfo_getipaddr(buffer) k_syscall_ex_ru32_u32(0x403, (buffer))
 #define sysinfo_reset() k_syscall_ex_ru32(0x404);
-
-#warning todo make gpio irq enforce one per pin
+#define sysinfo_setlocklevel(level) k_syscall_ex_ru32_u32(0x405, (level))
 
 //---------- I2C
 #define i2c_transact(iswrite, address, flags, buffer, len, callback, r) k_syscall_ex_ri32_u32_u32_u32_buf_u32_vptr_vptr((0x500 + (iswrite)), (address), (flags), (buffer), (len), (callback), (r))
@@ -131,6 +141,17 @@ int32_t __attribute__((naked)) k_syscall_ex_rcptr_u32_u32(uint32_t id, const cha
 #define routingtable_getroute(key, buffer) k_syscall_ex_ri32_u32_u32(0x703, (key), (buffer))
 #define routingtable_lookuproute(prefix, prefix_len, buffer) k_syscall_ex_rcptr_u32_u32(0x704, (prefix), (prefix_len), (buffer))
 #define routingtable_gettable(size, buffer) k_syscall_ex_ri32_u32_u32(0x705, (size), (buffer))
+
+#define aes_encrypt(iv, mlen, message, dest) \
+    k_syscall_ex_ri32_cptr_u32_cptr_cptr(0x801, (iv),(mlen),(message),(dest))
+#define aes_decrypt(iv, mlen, message, dest) \
+    k_syscall_ex_ri32_cptr_u32_cptr_cptr(0x802, (iv),(mlen),(message),(dest))
+#define aes_setkey(key) k_syscall_ex_ri32_cptr(0x803, (key))
+
+#define spi_set_cs(state) k_syscall_ex_ri32_u32(0x901, (state))
+#define spi_init(mode, baudrate) k_syscall_ex_ri32_u32_u32(0x902, (mode), (baudrate))
+#define spi_write(txbuf, rxbuf, len, cb, r) k_syscall_ex_ri32_vptr_vptr_uint32_vptr_vptr(0x903, (txbuf), (rxbuf), (len), (cb), (r))
+
 
 static lua_State *_cb_L;
 #define MAXPINSPEC 20
@@ -1291,6 +1312,137 @@ int libstorm_os_reset(lua_State *L)
     return 0;
 }
 
+int libstorm_os_setpowerlock(lua_State *L)
+{
+    int level = lua_tonumber(L, 1);
+    sysinfo_setlocklevel(level);
+    return 0;
+}
+
+//lua: storm.aes.encrypt(iv, msg) -> encmsg
+int libstorm_aes_encrypt(lua_State *L)
+{
+    const char *iv;
+    const char *msg;
+    char *rv;
+    size_t len;
+    iv = lua_tolstring(L, 1, &len);
+    if (len != 16) {
+        return luaL_error(L, "Expected iv length 16");
+    }
+    msg = lua_tolstring(L, 2, &len);
+    if (len % 16 != 0)
+    {
+        return luaL_error(L, "You need to pad ur message to %16");
+    }
+    rv = malloc(len);
+    aes_encrypt(iv, len, msg, &rv[0]);
+    lua_pushlstring(L, rv, len);
+    free(rv);
+    return 1;
+}
+
+//lua: storm.aes.decrypt(iv, msg) -> decmsg
+int libstorm_aes_decrypt(lua_State *L)
+{
+    const char *iv;
+    const char *msg;
+    char *rv;
+    size_t len;
+    iv = lua_tolstring(L, 1, &len);
+    if (len != 16) {
+        return luaL_error(L, "Expected iv length 16");
+    }
+    msg = lua_tolstring(L, 2, &len);
+    if (len % 16 != 0)
+    {
+        return luaL_error(L, "Message should be padded?");
+    }
+    rv = malloc(len);
+    aes_decrypt(iv, len, msg, &rv[0]);
+    lua_pushlstring(L, rv, len);
+    free(rv);
+    return 1;
+}
+
+//lua: storm.aes.setkey(key) -> nil
+int libstorm_aes_setkey(lua_State *L)
+{
+    const char *key;
+    size_t len;
+    key = lua_tolstring(L, 1, &len);
+    if (len != 32) {
+        return luaL_error(L, "Expected key length 32");
+    }
+    printf("syscallivk\n");
+    aes_setkey((char*)key);
+    printf("syscallret\n");
+    return 0;
+}
+
+//lua: storm.spi.setcs(val) -> nil
+int libstorm_spi_set_cs(lua_State *L)
+{
+    int val = luaL_checkinteger(L, 1);
+    spi_set_cs(val);
+    return 0;
+}
+
+//lua: storm.spi.init(mode, val) -> nil
+int libstorm_spi_init(lua_State *L)
+{
+    int mode = luaL_checkinteger(L, 1);
+    int baud = luaL_checkinteger(L, 2);
+    spi_init(mode, baud);
+    return 0;
+}
+
+typedef struct {
+    int tx_ref;
+    int rx_ref;
+    int cb_ref;
+} spi_xfer_t;
+
+void spi_xfer_cb(void *r)
+{
+    spi_xfer_t *t = r;
+    int rv;
+    const char* msg;
+    lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, t->cb_ref);
+    if ((rv = lua_pcall(_cb_L, 0, 0, 0)) != 0)
+    {
+        printf("[ERROR] could not run spi callback (%d)\n", rv);
+        msg = lua_tostring(_cb_L, -1);
+        printf("[ERROR] msg: %s\n", msg);
+    }
+    luaL_unref(_cb_L, LUA_REGISTRYINDEX, t->cb_ref);
+    luaL_unref(_cb_L, LUA_REGISTRYINDEX, t->tx_ref);
+    luaL_unref(_cb_L, LUA_REGISTRYINDEX, t->rx_ref);
+    free(t);
+}
+//lua: storm.spi.xfer(txarr, rxarr, cb) -> nil
+int libstorm_spi_xfer(lua_State *L)
+{
+    spi_xfer_t *t;
+    int rv;
+    storm_array_t *txarr = lua_touserdata(L, 1);
+    storm_array_t *rxarr = lua_touserdata(L, 2);
+    t = malloc(sizeof(spi_xfer_t));
+    if (!t)
+    {
+        return luaL_error( L, "out of memory");
+    }
+    t->cb_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    t->rx_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    t->tx_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    rv = spi_write(ARR_START(txarr), ARR_START(rxarr), txarr->len, spi_xfer_cb, t);
+    if (rv != 0)
+    {
+        free(t);
+        return luaL_error( L, "bad spi tx");
+    }
+    return 0;
+}
 // Module function map
 #define MIN_OPT_LEVEL 2
 #include "lrodefs.h" 
@@ -1383,6 +1535,7 @@ const LUA_REG_TYPE libstorm_os_map[] =
     { LSTRKEY( "getroute" ), LFUNCVAL ( libstorm_os_getroute ) },
     { LSTRKEY( "lookuproute" ), LFUNCVAL ( libstorm_os_lookuproute ) },
     { LSTRKEY( "gettable" ), LFUNCVAL ( libstorm_os_gettable ) },
+    { LSTRKEY( "setpowerlock"), LFUNCVAL ( libstorm_os_setpowerlock) },
     { LSTRKEY( "ROUTE_IFACE_ALL" ), LNUMVAL ( 0 ) },
     { LSTRKEY( "ROUTE_IFACE_154" ), LNUMVAL ( 1 ) },
     { LSTRKEY( "ROUTE_IFACE_PPP" ), LNUMVAL ( 2 ) },
@@ -1415,6 +1568,20 @@ const LUA_REG_TYPE libstorm_bl_map[] =
     { LSTRKEY( "addservice" ),  LFUNCVAL ( libstorm_bl_addservice ) },
     { LSTRKEY( "addcharacteristic" ),  LFUNCVAL ( libstorm_bl_addcharacteristic ) },
     { LSTRKEY( "notify" ),  LFUNCVAL ( libstorm_bl_notify ) },
+    { LNILKEY, LNILVAL }
+};
+const LUA_REG_TYPE libstorm_aes_map[] =
+{
+    { LSTRKEY( "encrypt" ),  LFUNCVAL ( libstorm_aes_encrypt ) },
+    { LSTRKEY( "decrypt" ),  LFUNCVAL ( libstorm_aes_decrypt ) },
+    { LSTRKEY( "setkey" ),  LFUNCVAL ( libstorm_aes_setkey ) },
+    { LNILKEY, LNILVAL }
+};
+const LUA_REG_TYPE libstorm_spi_map[] =
+{
+    { LSTRKEY( "setcs" ),  LFUNCVAL ( libstorm_spi_set_cs ) },
+    { LSTRKEY( "init" ),  LFUNCVAL ( libstorm_spi_init ) },
+    { LSTRKEY( "xfer" ), LFUNCVAL ( libstorm_spi_xfer) },
     { LNILKEY, LNILVAL }
 };
 /*

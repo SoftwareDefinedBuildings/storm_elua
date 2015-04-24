@@ -24,6 +24,8 @@ function get_platform_modules( board, cpu )
       i2c  = { lib='"i2c"', map = "libstorm_i2c_map", open = false},
       n  = { lib='"n"', map = "contrib_native_map", open = false},
       bl  = { lib='"bl"', map = "libstorm_bl_map", open = false},
+      aes  = { lib='"aes"', map = "libstorm_aes_map", open = false},
+      spi = { lib='"spi"', map ="libstorm_spi_map", open = false}
   }
   return m
 end
