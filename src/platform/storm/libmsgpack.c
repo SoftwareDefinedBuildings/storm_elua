@@ -509,7 +509,7 @@ void mp_encode_ext(lua_State *L, mp_buf *buf, uint32_t len, uint8_t type) {
         enclen = 4;
     }
     mp_buf_append(buf, b, enclen);
-    mp_buf_append(buf, (const unsigned char *)lua_topointer(L, 1), len);
+    mp_buf_append(buf, (const unsigned char *)lua_topointer(L, -1), len);
 }
 
 // encode a storm array into msgpack -- GTF
@@ -518,7 +518,7 @@ void mp_encode_stormarray(lua_State *L, mp_buf *buf) {
     uint32_t len = 4;
 
     // get the stormarray off the stack
-    storm_array_t *arr = lua_touserdata(L, 1);
+    storm_array_t *arr = lua_touserdata(L, -1);
 
     // increase len by length of data in stormarray
     len += arr->len;
