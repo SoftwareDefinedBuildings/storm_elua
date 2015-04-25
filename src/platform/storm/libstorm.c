@@ -1414,9 +1414,7 @@ int libstorm_aes_setkey(lua_State *L)
     if (len != 32) {
         return luaL_error(L, "Expected key length 32");
     }
-    printf("syscallivk\n");
     aes_setkey((char*)key);
-    printf("syscallret\n");
     return 0;
 }
 
