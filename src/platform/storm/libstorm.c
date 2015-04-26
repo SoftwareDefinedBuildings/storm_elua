@@ -92,6 +92,10 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_vptr_vptr_uint32_vptr_vptr(uint
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
 }
+int32_t __attribute__((naked)) k_syscall_ex_ri32_uint32_vptr_uint32_vptr_vptr(uint32_t id, uint32_t a, void* b, uint32_t c, void *d, void *e)
+{
+    __syscall_body(ABI_ID_SYSCALL_EX);
+}
 //Some driver specific syscalls
 //--------- GPIO
 #define simplegpio_set_mode(dir,pinspec) k_syscall_ex_ri32_u32_u32(0x101,(dir),(pinspec))
@@ -155,6 +159,8 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_vptr_vptr_uint32_vptr_vptr(uint
 #define spi_init(mode, baudrate) k_syscall_ex_ri32_u32_u32(0x902, (mode), (baudrate))
 #define spi_write(txbuf, rxbuf, len, cb, r) k_syscall_ex_ri32_vptr_vptr_uint32_vptr_vptr(0x903, (txbuf), (rxbuf), (len), (cb), (r))
 
+#define flash_write(addr, buf, len, cb, r) k_syscall_ex_ri32_uint32_vptr_uint32_vptr_vptr(0xa02, (addr), (buf),(len),(cb),(r))
+#define flash_read(addr, buf, len, cb, r) k_syscall_ex_ri32_uint32_vptr_uint32_vptr_vptr(0xa01, (addr), (buf),(len),(cb),(r))
 
 static lua_State *_cb_L;
 #define MAXPINSPEC 20
@@ -1481,6 +1487,74 @@ int libstorm_spi_xfer(lua_State *L)
     }
     return 0;
 }
+
+typedef struct {
+    int buf_ref;
+    int cb_ref;
+} flash_xfer_t;
+
+void flash_xfer_cb(void *r)
+{
+    flash_xfer_t *t = r;
+    int rv;
+    const char* msg;
+    lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, t->cb_ref);
+    if ((rv = lua_pcall(_cb_L, 0, 0, 0)) != 0)
+    {
+        printf("[ERROR] could not run flash callback (%d)\n", rv);
+        msg = lua_tostring(_cb_L, -1);
+        printf("[ERROR] msg: %s\n", msg);
+    }
+    luaL_unref(_cb_L, LUA_REGISTRYINDEX, t->buf_ref);
+    luaL_unref(_cb_L, LUA_REGISTRYINDEX, t->cb_ref);
+    free(t);
+}
+
+//lua: storm.flash.write(addr, txarr, cb)
+int libstorm_flash_write(lua_State *L)
+{
+    flash_xfer_t *t;
+    int rv;
+    uint32_t addr = lua_tonumber(L, 1);
+    storm_array_t *txarr = lua_touserdata(L, 2);
+    t = malloc(sizeof(flash_xfer_t));
+    if (!t)
+    {
+        return luaL_error( L, "out of memory");
+    }
+    t->cb_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    t->buf_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    rv = flash_write(addr, ARR_START(txarr), txarr->len, flash_xfer_cb, t);
+    if (rv != 0)
+    {
+        free(t);
+        return luaL_error( L, "bad flash tx");
+    }
+    return 0;
+}
+
+//lua: storm.flash.read(addr, rxarr, cb)
+int libstorm_flash_read(lua_State *L)
+{
+    flash_xfer_t *t;
+    int rv;
+    uint32_t addr = lua_tonumber(L, 1);
+    storm_array_t *rxarr = lua_touserdata(L, 2);
+    t = malloc(sizeof(flash_xfer_t));
+    if (!t)
+    {
+        return luaL_error( L, "out of memory");
+    }
+    t->cb_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    t->buf_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    rv = flash_read(addr, ARR_START(rxarr), rxarr->len, flash_xfer_cb, t);
+    if (rv != 0)
+    {
+        free(t);
+        return luaL_error( L, "bad flash rx");
+    }
+    return 0;
+}
 // Module function map
 #define MIN_OPT_LEVEL 2
 #include "lrodefs.h" 
@@ -1625,6 +1699,13 @@ const LUA_REG_TYPE libstorm_spi_map[] =
     { LSTRKEY( "xfer" ), LFUNCVAL ( libstorm_spi_xfer) },
     { LNILKEY, LNILVAL }
 };
+const LUA_REG_TYPE libstorm_flash_map[] =
+{
+    { LSTRKEY( "write" ),  LFUNCVAL ( libstorm_flash_write ) },
+    { LSTRKEY( "read" ),  LFUNCVAL ( libstorm_flash_read ) },
+    { LNILKEY, LNILVAL }
+};
+
 /*
 const LUA_REG_TYPE libstorm_map[] =
 {
