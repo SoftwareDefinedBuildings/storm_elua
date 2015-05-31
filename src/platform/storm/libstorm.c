@@ -162,7 +162,7 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_uint32_vptr_uint32_vptr_vptr(ui
 #define flash_write(addr, buf, len, cb, r) k_syscall_ex_ri32_uint32_vptr_uint32_vptr_vptr(0xa02, (addr), (buf),(len),(cb),(r))
 #define flash_read(addr, buf, len, cb, r) k_syscall_ex_ri32_uint32_vptr_uint32_vptr_vptr(0xa01, (addr), (buf),(len),(cb),(r))
 
-static lua_State *_cb_L;
+lua_State *_cb_L;
 #define MAXPINSPEC 20
 static const u16 pinspec_map [] =
 {
