@@ -1219,26 +1219,9 @@ int libstorm_net_clear_stats(lua_State *L)
 }
 int libstorm_net_retry_stats(lua_State *L)
 {
-    storm_array_t *arr;
     void* retrystats = udp_get_retrystats();
-
-    // retrystats is
-    // struct
-    // {
-    //     uint8_t pkt_cnt[256];
-    //     uint8_t tx_cnt[256];
-    // } __attribute__((packed));
-
-    // pkt_cnt
-    storm_array_nc_create(L, 256, ARR_TYPE_UINT8);
-    arr = lua_touserdata(L, -1);
-    memcpy(ARR_START(arr), retrystats, 256 * sizeof(uint8_t));
-
-    // tx_cnt
-    storm_array_nc_create(L, 256, ARR_TYPE_UINT8);
-    arr = lua_touserdata(L, -1);
-    memcpy(ARR_START(arr), retrystats+256, 256 * sizeof(uint8_t));
-    return 2;
+    lua_pushlstring(L, retrystats, 4);
+    return 1;
 }
 int libstorm_net_clear_retry_stats(lua_State *L)
 {
