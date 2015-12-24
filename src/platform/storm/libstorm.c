@@ -96,6 +96,14 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_uint32_vptr_uint32_vptr_vptr(ui
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
 }
+int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_cptr_u32(uint32_t id, uint32_t arg0, char* arg1, uint32_t arg2)
+{
+    __syscall_body(ABI_ID_SYSCALL_EX);
+}
+int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_u8ptr_u32_u32ptr(uint32_t id, uint32_t arg0, uint8_t* arg1, uint32_t arg2, uint32_t* arg3)
+{
+    __syscall_body(ABI_ID_SYSCALL_EX);
+}
 //Some driver specific syscalls
 //--------- GPIO
 #define simplegpio_set_mode(dir,pinspec) k_syscall_ex_ri32_u32_u32(0x101,(dir),(pinspec))
@@ -161,6 +169,27 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_uint32_vptr_uint32_vptr_vptr(ui
 
 #define flash_write(addr, buf, len, cb, r) k_syscall_ex_ri32_uint32_vptr_uint32_vptr_vptr(0xa02, (addr), (buf),(len),(cb),(r))
 #define flash_read(addr, buf, len, cb, r) k_syscall_ex_ri32_uint32_vptr_uint32_vptr_vptr(0xa01, (addr), (buf),(len),(cb),(r))
+
+//------------ TCP
+#define SHUT_RD 0
+#define SHUT_WR 1
+#define SHUT_RDWR 2
+
+#define tcp_activesocket() k_syscall_ex_ri32(0xc00)
+#define tcp_passivesocket() k_syscall_ex_ri32(0xc01)
+#define tcp_bind(fd, port) k_syscall_ex_ri32_u32_u32(0xc02, (fd), (port))
+#define tcp_connect(fd, addr, port) k_syscall_ex_ri32_u32_cptr_u32(0xc03, (fd), (addr), (port))
+#define tcp_listenaccept(fd) k_syscall_ex_ri32_u32(0xc04, (fd))
+#define tcp_send(fd, buffer, length, numbytes) k_syscall_ex_ri32_u32_u8ptr_u32_u32ptr(0xc05, (fd), (buffer), (length), (numbytes))
+#define tcp_receive(fd, buffer, length, numbytes) k_syscall_ex_ri32_u32_u8ptr_u32_u32ptr(0xc06, (fd), (buffer), (length), (numbytes))
+#define tcp_shutdown(fd, how) k_syscall_ex_ri32_u32_u32(0xc07, (fd), (how))
+#define tcp_close(fd) k_syscall_ex_ri32_u32(0xc08, (fd))
+#define tcp_abort(fd) k_syscall_ex_ri32_u32(0xc09, (fd))
+#define tcp_set_connectDone_cb(fd, cb, r) k_syscall_ex_ri32_u32_cb_vptr(0xc0a, (fd), (cb), (r))
+#define tcp_set_sendReady_cb() k_syscall_ex_ri32_u32_cb_vptr(0xc0b, (fd), (cb), (r))
+#define tcp_set_recvReady_cb() k_syscall_ex_ri32_u32_cb_vptr(0xc0c, (fd), (cb), (r))
+#define tcp_set_connectionLost_cb() k_syscall_ex_ri32_u32_cb_vptr(0xc0d, (fd), (cb), (r))
+#define tcp_set_acceptDone_cb() k_syscall_ex_ri32_u32_cb_vptr(0xc0e, (fd), (cb), (r))
 
 lua_State *_cb_L;
 #define MAXPINSPEC 20
