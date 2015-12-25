@@ -1052,7 +1052,7 @@ int libstorm_net_recvready_cb(void* sock_ptr) {
     return 0;
 }
 
-// Lua: storm.net.tcpaddrecvready(fd, recvReady)
+// Lua: storm.net.tcpaddrecvready(socket, recvReady)
 int libstorm_net_tcpaddrecvready(lua_State* L) {
     storm_tcp_socket_t* sock;
     char* errparam = "expected (socket, recvReady)";
@@ -1090,7 +1090,7 @@ int libstorm_net_connectionlost_cb(void* sock_ptr, uint32_t how) {
     return 0;
 }
 
-// Lua: storm.net.tcpaddconnectionlost(fd, connectionLost)
+// Lua: storm.net.tcpaddconnectionlost(socket, connectionLost)
 int libstorm_net_tcpaddconnectionlost(lua_State* L) {
     storm_tcp_socket_t* sock;
     char* errparam = "expected (socket, connectionLost)";
@@ -1232,7 +1232,7 @@ int libstorm_net_tcpconnect(lua_State* L) {
     return 1;
 }
 
-// Lua: storm.net.tcplistenaccept(socket, acceptDone)
+// Lua: storm.net.tcplistenaccept(socket, [acceptDone])
 int libstorm_net_tcplistenaccept(lua_State* L) {
     char* errparam = "expected (socket, [acceptDone])";
     int has_acceptDone = (lua_gettop(L) == 2);
