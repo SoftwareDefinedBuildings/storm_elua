@@ -1287,6 +1287,75 @@ int libstorm_net_tcpsend(lua_State* L) {
     return 2;
 }
 
+int libstorm_net_tcptrysend(lua_State* L) {
+    storm_tcp_socket_t* sock = lua_touserdata(L, lua_upvalueindex(1)); // active TCP socket
+    size_t buflen;
+    const char* buffer = lua_tolstring(L, lua_upvalueindex(2), &buflen); // the data buffer to send
+    size_t bytessent = (size_t) lua_tointeger(L, lua_upvalueindex(3)); // the number of bytes sent so far
+    int origcallback = lua_tointeger(L, lua_upvalueindex(4)); // the original callback to restore when done
+    // At upvalue index 5 is the function that we call once either (1) we finish sending, or (2) we encounter an error.
+    int errno;
+    size_t numbytes;
+    luaL_unref(L, LUA_REGISTRYINDEX, sock->sendReady_cb_ref);
+    sock->sendReady_cb_ref = LUA_NOREF;
+    errno = (int) tcp_send(sock->fd, ((uint8_t*) buffer) + bytessent, (uint32_t) (buflen - bytessent), (uint32_t*) &numbytes);
+    bytessent += numbytes;
+    if (buflen == bytessent || errno != 0) {
+        // We finished sending the message or hit an error
+        sock->sendReady_cb_ref = origcallback;
+        lua_pushvalue(L, lua_upvalueindex(5));
+        lua_pushnumber(L, bytessent);
+        lua_pushnumber(L, errno);
+        lua_call(L, 2, 0);
+    } else {
+        // Try sending again
+        lua_pushvalue(L, lua_upvalueindex(1));
+        lua_pushvalue(L, lua_upvalueindex(2));
+        lua_pushnumber(L, bytessent);
+        lua_pushvalue(L, lua_upvalueindex(4));
+        lua_pushvalue(L, lua_upvalueindex(5));
+        lua_pushcclosure(L, libstorm_net_tcptrysend, 5);
+        sock->sendReady_cb_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    }
+    return 0;
+}
+
+// Lua: storm.net.tcpsendfull(socket, buffer, callback)
+// Uses the sendReady callback to repeatedly call send until the entire buffer is sent.
+// Restores sendReady at the end (which is why this can't just wrap around the other functions above)
+int libstorm_net_tcpsendfull(lua_State* L) {
+    char* errparam = "expected (socket, buffer)";
+    storm_tcp_socket_t* sock;
+    int oldcallback;
+    
+    if (lua_gettop(L) != 3)
+        return luaL_error(L, errparam);
+        
+    sock = lua_touserdata(L, 1);
+    if (!sock)
+        return luaL_error(L, errparam);
+        
+    if (sock->passive)
+        return luaL_error(L, "expected active socket");
+        
+    luaL_checkstring(L, 2);
+    
+    oldcallback = sock->sendReady_cb_ref;
+    sock->sendReady_cb_ref = LUA_NOREF;
+    
+    // In case there was no existing callback
+    tcp_set_sendReady_cb(sock->fd, libstorm_net_sendready_cb, sock);
+    
+    lua_pushvalue(L, 1);
+    lua_pushvalue(L, 2);
+    lua_pushnumber(L, 0); // number of bytes sent so far
+    lua_pushnumber(L, oldcallback);
+    lua_pushvalue(L, 3);
+    lua_pushcclosure(L, libstorm_net_tcptrysend, 5);
+    lua_call(L, 0, 0);
+    return 0;
+}
+
 // Lua: storm.net.tcprecv(socket, numbytes)
 int libstorm_net_tcprecv(lua_State* L) {
     char* errparam = "expected (socket, numbytes)";
@@ -1320,6 +1389,85 @@ int libstorm_net_tcprecv(lua_State* L) {
     free(buffer);
     
     return 2;
+}
+
+int libstorm_net_tcptryrecv(lua_State* L) {
+    storm_tcp_socket_t* sock = lua_touserdata(L, lua_upvalueindex(1)); // active TCP socket
+    uint8_t* buffer = lua_touserdata(L, lua_upvalueindex(2)); // the data buffer to receive into
+    size_t buflen = lua_tointeger(L, lua_upvalueindex(3)); // the length of the data buffer
+    size_t bytesrcvd = (size_t) lua_tointeger(L, lua_upvalueindex(4)); // the number of bytes received so far
+    int origcallback = lua_tointeger(L, lua_upvalueindex(5)); // the original callback to restore when done
+    // At upvalue index 6 is the function that we call once either (1) we finish sending, or (2) we encounter an error.
+    
+    int errno;
+    size_t numbytes;
+    luaL_unref(L, LUA_REGISTRYINDEX, sock->recvReady_cb_ref);
+    sock->recvReady_cb_ref = LUA_NOREF;
+    errno = (int) tcp_receive(sock->fd, ((uint8_t*) buffer) + bytesrcvd, (uint32_t) (buflen - bytesrcvd), (uint32_t*) &numbytes);
+    bytesrcvd += numbytes;
+    if (buflen == bytesrcvd || errno != 0) {
+        // We finished receiving the message or hit an error
+        sock->recvReady_cb_ref = origcallback;
+        lua_pushvalue(L, lua_upvalueindex(6));
+        lua_pushlstring(L, (char*) buffer, bytesrcvd);
+        free(buffer);
+        lua_pushnumber(L, errno);
+        lua_call(L, 2, 0);
+    } else {
+        // Try receiving again
+        lua_pushvalue(L, lua_upvalueindex(1));
+        lua_pushvalue(L, lua_upvalueindex(2));
+        lua_pushvalue(L, lua_upvalueindex(3));
+        lua_pushnumber(L, bytesrcvd);
+        lua_pushvalue(L, lua_upvalueindex(5));
+        lua_pushvalue(L, lua_upvalueindex(6));
+        lua_pushcclosure(L, libstorm_net_tcptryrecv, 6);
+        sock->recvReady_cb_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    }
+    return 0;
+}
+
+// Lua: storm.net.tcprecvfull(socket, numbytes, callback)
+// Uses the recvReady callback to repeatedly calls recv until the full number of bytes is received.
+// Restores recvReady at the end (which is why this can't just wrap around the other functions above)
+int libstorm_net_tcprecvfull(lua_State* L) {
+    char* errparam = "expected (socket, numbytes)";
+    storm_tcp_socket_t* sock;
+    char* buffer;
+    int numbytes;
+    int oldcallback;
+    
+    if (lua_gettop(L) != 3)
+        return luaL_error(L, errparam);
+        
+    sock = lua_touserdata(L, 1);
+    if (!sock)
+        return luaL_error(L, errparam);
+        
+    if (sock->passive)
+        return luaL_error(L, "expected active socket");
+        
+    numbytes = luaL_checkint(L, 2);
+    buffer = malloc((size_t) numbytes);
+    if (!buffer) {
+        return luaL_error(L, "out of memory");
+    }
+    
+    oldcallback = sock->recvReady_cb_ref;
+    sock->recvReady_cb_ref = LUA_NOREF;
+    
+    // In case there was no existing callback
+    tcp_set_recvReady_cb(sock->fd, libstorm_net_recvready_cb, sock);
+    
+    lua_pushvalue(L, 1);
+    lua_pushlightuserdata(L, buffer);
+    lua_pushvalue(L, 2);
+    lua_pushnumber(L, 0); // number of bytes received
+    lua_pushnumber(L, oldcallback);
+    lua_pushvalue(L, 3);
+    lua_pushcclosure(L, libstorm_net_tcptryrecv, 6);
+    lua_call(L, 0, 0);
+    return 0;
 }
 
 // Lua: storm.net.tcpshutdown(socket, how)
@@ -2216,6 +2364,8 @@ const LUA_REG_TYPE libstorm_net_map[] =
     { LSTRKEY( "tcpclose" ), LFUNCVAL ( libstorm_net_tcpclose ) },
     { LSTRKEY( "tcpabort" ), LFUNCVAL ( libstorm_net_tcpabort ) },
     { LSTRKEY( "tcpfd" ), LFUNCVAL ( libstorm_net_tcpfd ) },
+    { LSTRKEY( "tcpsendfull" ), LFUNCVAL( libstorm_net_tcpsendfull ) },
+    { LSTRKEY( "tcprecvfull" ), LFUNCVAL( libstorm_net_tcprecvfull ) },
     { LSTRKEY( "SHUT_RD" ), LNUMVAL ( SHUT_RD ) },
     { LSTRKEY( "SHUT_WR" ), LNUMVAL ( SHUT_WR ) },
     { LSTRKEY( "SHUT_RDWR" ), LNUMVAL ( SHUT_RDWR ) },
