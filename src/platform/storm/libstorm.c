@@ -175,8 +175,8 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_u8ptr_u32_u32ptr(uint32_t i
 #define SHUT_WR 1
 #define SHUT_RDWR 2
 
-#define tcp_activesocket() k_syscall_ex_ri32(0xc00)
-#define tcp_passivesocket() k_syscall_ex_ri32(0xc01)
+#define tcp_passivesocket() k_syscall_ex_ri32(0xc00)
+#define tcp_activesocket() k_syscall_ex_ri32(0xc01)
 #define tcp_bind(fd, port) k_syscall_ex_ri32_u32_u32(0xc02, (fd), (port))
 #define tcp_connect(fd, addr, port) k_syscall_ex_ri32_u32_cptr_u32(0xc03, (fd), (addr), (port))
 #define tcp_listenaccept(fd) k_syscall_ex_ri32_u32(0xc04, (fd))
