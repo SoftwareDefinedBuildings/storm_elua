@@ -1324,7 +1324,7 @@ int libstorm_net_tcptrysend(lua_State* L) {
 // Uses the sendReady callback to repeatedly call send until the entire buffer is sent.
 // Restores sendReady at the end (which is why this can't just wrap around the other functions above)
 int libstorm_net_tcpsendfull(lua_State* L) {
-    char* errparam = "expected (socket, buffer)";
+    char* errparam = "expected (socket, buffer, callback)";
     storm_tcp_socket_t* sock;
     int oldcallback;
     
@@ -1431,7 +1431,7 @@ int libstorm_net_tcptryrecv(lua_State* L) {
 // Uses the recvReady callback to repeatedly calls recv until the full number of bytes is received.
 // Restores recvReady at the end (which is why this can't just wrap around the other functions above)
 int libstorm_net_tcprecvfull(lua_State* L) {
-    char* errparam = "expected (socket, numbytes)";
+    char* errparam = "expected (socket, numbytes, callback)";
     storm_tcp_socket_t* sock;
     char* buffer;
     int numbytes;
