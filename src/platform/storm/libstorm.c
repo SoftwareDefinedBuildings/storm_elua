@@ -957,19 +957,16 @@ void helper_reg_callback(lua_State* L, int* cb_ref_ptr) {
     }
 }
 
-int libstorm_net_connectdone_cb(void* sock_ptr, uint32_t arg0port, char* addr) {
+int libstorm_net_connectdone_cb(void* sock_ptr) {
     storm_tcp_socket_t* sock = sock_ptr;
-    uint16_t port = (uint16_t) (arg0port & 0xFFFF);
     int rv;
     const char* msg;
     if (sock->connectDone_cb_ref == LUA_NOREF) {
         return 0;
     }
     lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, sock->connectDone_cb_ref);
-    lua_pushstring(_cb_L, addr);
-    lua_pushnumber(_cb_L, port);
     lua_pushlightuserdata(_cb_L, sock);
-    if ((rv = lua_pcall(_cb_L, 3, 0, 0)) != 0)
+    if ((rv = lua_pcall(_cb_L, 1, 0, 0)) != 0)
     {
         printf("[ERROR] could not run net.connectdone callback (%d)\n", rv);
         msg = lua_tostring(_cb_L, -1);
