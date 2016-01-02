@@ -1252,6 +1252,17 @@ int libstorm_net_tcplistenaccept(lua_State* L) {
     }
     
     rv = tcp_listenaccept(sock->fd);
+    
+    // Invoke the callback right away, to indicate the error
+    if (rv && sock->acceptDone_cb_ref != LUA_NOREF) {
+        lua_rawgeti(L, LUA_REGISTRYINDEX, sock->acceptDone_cb_ref);
+        lua_pushnil(L);
+        lua_pushnil(L);
+        lua_pushnumber(L, rv);
+        lua_pushvalue(L, 1);
+        lua_call(L, 4, 0);
+    }
+    
     lua_pushnumber(L, rv);
     return 1;
 }
@@ -2366,6 +2377,16 @@ const LUA_REG_TYPE libstorm_net_map[] =
     { LSTRKEY( "SHUT_RD" ), LNUMVAL ( SHUT_RD ) },
     { LSTRKEY( "SHUT_WR" ), LNUMVAL ( SHUT_WR ) },
     { LSTRKEY( "SHUT_RDWR" ), LNUMVAL ( SHUT_RDWR ) },
+    { LSTRKEY( "EBADF" ), LNUMVAL( 9 ) },
+    { LSTRKEY( "ENFILE" ), LNUMVAL( 23 ) },
+    { LSTRKEY( "ECONNABORTED" ), LNUMVAL( 53 ) },
+    { LSTRKEY( "ECONNRESET" ), LNUMVAL( 54 ) },
+    { LSTRKEY( "ENOBUFS" ), LNUMVAL( 55 ) },
+    { LSTRKEY( "EISCONN" ), LNUMVAL( 56 ) },
+    { LSTRKEY( "ENOTCONN" ), LNUMVAL( 57 ) },
+    { LSTRKEY( "ESHUTDOWN" ), LNUMVAL( 58 ) },
+    { LSTRKEY( "ETIMEDOUT" ), LNUMVAL( 60 ) },
+    { LSTRKEY( "ECONNREFUSED" ), LNUMVAL( 61 ) },
     { LNILKEY, LNILVAL }
 };
 const LUA_REG_TYPE libstorm_bl_map[] =
