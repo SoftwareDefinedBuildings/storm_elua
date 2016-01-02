@@ -11,6 +11,7 @@
 #include <ctype.h>
 #include "utils.h"
 #include <interface.h>
+#include <libstorm.h>
 static p_std_send_char std_send_char_func;
 static p_std_get_char std_get_char_func;
 int std_prev_char = -1;
@@ -119,6 +120,7 @@ static _ssize_t std_write( struct _reent *r, int fd, const void* vptr, size_t le
     return -1;
   }  
   
+  libstorm_os_calloutputhook(vptr, len);
   k_write(1, (uint8_t*)vptr, len);
   return len;
 }
