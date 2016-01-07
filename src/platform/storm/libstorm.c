@@ -104,7 +104,7 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_u8ptr_u32_u32ptr(uint32_t i
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
 }
-int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_vptr_u32ptr(uint32_t id, uint32_t a, void* b, uint32_t* c)
+int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_vptr_iptr(uint32_t id, uint32_t a, void* b, int* c)
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
 }
@@ -184,7 +184,7 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_vptr_u32ptr(uint32_t id, ui
 #define tcp_bind(fd, port) k_syscall_ex_ri32_u32_u32(0xc02, (fd), (port))
 #define tcp_connect(fd, addr, port) k_syscall_ex_ri32_u32_cptr_u32(0xc03, (fd), (addr), (port))
 #define tcp_listenaccept(fd) k_syscall_ex_ri32_u32(0xc04, (fd))
-#define tcp_send(fd, data, state) k_syscall_ex_ri32_u32_vptr_u32ptr(0xc05, (fd), (data), (state))
+#define tcp_send(fd, data, state) k_syscall_ex_ri32_u32_vptr_iptr(0xc05, (fd), (data), (state))
 #define tcp_receive(fd, buffer, length, numbytes) k_syscall_ex_ri32_u32_u8ptr_u32_u32ptr(0xc06, (fd), (buffer), (length), (numbytes))
 #define tcp_shutdown(fd, how) k_syscall_ex_ri32_u32_u32(0xc07, (fd), (how))
 #define tcp_close(fd) k_syscall_ex_ri32_u32(0xc08, (fd))
@@ -921,7 +921,7 @@ struct lbufent {
 // Struct that represents data for an outstanding call to send()
 struct sendstate {
     struct lbufent* entry;
-    int reg;
+    int ref;
     struct sendstate* next;
 };
 
@@ -960,6 +960,7 @@ int libstorm_net_connectdone_cb(void* sock_ptr) {
 int libstorm_net_senddone_cb(void* sock_ptr, uint32_t howmany) {
     storm_tcp_socket_t* sock = sock_ptr;
     uint32_t i;
+    size_t strlen;
     struct sendstate* newhead;
     uint32_t totalbytesdone = 0;
     int rv;
@@ -971,8 +972,11 @@ int libstorm_net_senddone_cb(void* sock_ptr, uint32_t howmany) {
             printf("Too many done sends! You shouldn't see this.\n");
             continue;
         }
-        luaL_unref(_cb_L, LUA_REGISTRYINDEX, sock->head->reg);
-        totalbytesdone += sock->head->entry->iov.iov_len;
+        lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, sock->head->ref);
+        lua_tolstring(_cb_L, -1, &strlen);
+        lua_pop(_cb_L, 1);
+        luaL_unref(_cb_L, LUA_REGISTRYINDEX, sock->head->ref);
+        totalbytesdone += strlen;
         free(sock->head->entry);
         newhead = sock->head->next;
         free(sock->head);
@@ -1340,7 +1344,6 @@ int libstorm_net_tcpsend(lua_State* L) {
         return luaL_error(L, "expected active socket");
         
     buffer = luaL_checklstring(L, 2, &buflen);
-        
     bufent = malloc(sizeof(struct lbufent));
     if (bufent == NULL) {
         goto nomemory;
@@ -1357,12 +1360,13 @@ int libstorm_net_tcpsend(lua_State* L) {
     bufent->extraspace = 0;
     
     sstate->entry = bufent;
-    sstate->reg = luaL_ref(L, LUA_REGISTRYINDEX);
+    sstate->ref = luaL_ref(L, LUA_REGISTRYINDEX);
     sstate->next = NULL;
     
-    errno = (int) tcp_send(sock->fd, bufent, (uint32_t*) state);
+    errno = (int) tcp_send(sock->fd, bufent, &state);
     
-    if (state != 0) {
+    if (state == 1) {
+        // The Kernel has a reference to this buffer, and we must keep track of it
         if (sock->tail == NULL) {
             sock->head = sstate;
         } else {
@@ -1371,6 +1375,7 @@ int libstorm_net_tcpsend(lua_State* L) {
         sock->tail = sstate;
         sock->numoutstanding += buflen;
     } else {
+        // Either the send failed, or this was copied into the last buffer already
         free(bufent);
         free(sstate);
     }
