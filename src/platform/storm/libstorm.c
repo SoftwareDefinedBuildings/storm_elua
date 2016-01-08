@@ -195,6 +195,7 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_vptr_iptr(uint32_t id, uint
 #define tcp_set_connectionLost_cb(fd, cb, r) k_syscall_ex_ri32_u32_cb_vptr(0xc0d, (fd), (cb), (r))
 #define tcp_set_acceptDone_cb(fd, cb, r) k_syscall_ex_ri32_u32_cb_vptr(0xc0e, (fd), (cb), (r))
 #define tcp_isestablished(fd) k_syscall_ex_ri32_u32(0xc0f, (fd))
+#define tcp_hasrcvdfin(fd) k_syscall_ex_ri32_u32(0xc10, (fd))
 
 lua_State *_cb_L;
 #define MAXPINSPEC 20
@@ -987,7 +988,7 @@ int libstorm_net_senddone_cb(void* sock_ptr, uint32_t howmany) {
     return 0;
 }
 
-int libstorm_net_recvready_cb(void* sock_ptr) {
+int libstorm_net_recvready_cb(void* sock_ptr, uint32_t gotfin) {
     storm_tcp_socket_t* sock = sock_ptr;
     int rv;
     const char* msg;
@@ -996,7 +997,8 @@ int libstorm_net_recvready_cb(void* sock_ptr) {
     }
     lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, sock->recvReady_cb_ref);
     lua_pushlightuserdata(_cb_L, sock);
-    if ((rv = lua_pcall(_cb_L, 1, 0, 0)) != 0)
+    lua_pushboolean(_cb_L, (int) gotfin);
+    if ((rv = lua_pcall(_cb_L, 2, 0, 0)) != 0)
     {
         printf("[ERROR] could not run net.recvready callback (%d)\n", rv);
         msg = lua_tostring(_cb_L, -1);
@@ -1484,6 +1486,7 @@ int libstorm_net_tcptryrecv(lua_State* L) {
     size_t buflen = lua_tointeger(L, lua_upvalueindex(3)); // the length of the data buffer
     size_t bytesrcvd = (size_t) lua_tointeger(L, lua_upvalueindex(4)); // the number of bytes received so far
     int origcallback = lua_tointeger(L, lua_upvalueindex(5)); // the original callback to restore when done
+    int gotfin = lua_toboolean(L, 1);
     // At upvalue index 6 is the function that we call once either (1) we finish sending, or (2) we encounter an error.
     
     int errno;
@@ -1492,7 +1495,7 @@ int libstorm_net_tcptryrecv(lua_State* L) {
     sock->recvReady_cb_ref = LUA_NOREF;
     errno = (int) tcp_receive(sock->fd, ((uint8_t*) buffer) + bytesrcvd, (uint32_t) (buflen - bytesrcvd), (uint32_t*) &numbytes);
     bytesrcvd += numbytes;
-    if (buflen == bytesrcvd || errno != 0) {
+    if (buflen == bytesrcvd || gotfin || errno != 0) {
         // We finished receiving the message or hit an error
         sock->recvReady_cb_ref = origcallback;
         lua_pushvalue(L, lua_upvalueindex(6));
@@ -1533,6 +1536,14 @@ int libstorm_net_tcprecvfull(lua_State* L) {
         
     if (sock->passive)
         return luaL_error(L, "expected active socket");
+        
+    if (tcp_hasrcvdfin(sock->fd)) {
+        lua_pushvalue(L, 3); // the callback
+        lua_pushstring(L, "");
+        lua_pushnumber(L, 0);
+        lua_call(L, 2, 0);
+        return 0;
+    }
         
     numbytes = luaL_checkint(L, 2);
     buffer = malloc((size_t) numbytes);
@@ -1663,6 +1674,24 @@ int libstorm_net_tcpisestablished(lua_State* L) {
         
     isestablished = tcp_isestablished(sock->fd);
     lua_pushboolean(L, (int) isestablished);
+    return 1;
+}
+
+// Lua: storm.net.tcphasrcvdfin(socket)
+int libstorm_net_tcphasrcvdfin(lua_State* L) {
+    char* errparam = "expected (socket)";
+    storm_tcp_socket_t* sock;
+    int32_t gotfin;
+    
+    if (lua_gettop(L) != 1)
+        return luaL_error(L, errparam);
+        
+    sock = lua_touserdata(L, 1);
+    if (!sock)
+        return luaL_error(L, errparam);
+        
+    gotfin = tcp_hasrcvdfin(sock->fd);
+    lua_pushboolean(L, (int) gotfin);
     return 1;
 }
 
@@ -2470,6 +2499,7 @@ const LUA_REG_TYPE libstorm_net_map[] =
     { LSTRKEY( "tcpoutstanding" ), LFUNCVAL( libstorm_net_tcpoutstanding ) },
     { LSTRKEY( "tcprecvfull" ), LFUNCVAL( libstorm_net_tcprecvfull ) },
     { LSTRKEY( "tcpisestablished" ), LFUNCVAL( libstorm_net_tcpisestablished ) },
+    { LSTRKEY( "tcphasrcvdfin" ), LFUNCVAL( libstorm_net_tcphasrcvdfin ) },
     { LSTRKEY( "SHUT_RD" ), LNUMVAL ( SHUT_RD ) },
     { LSTRKEY( "SHUT_WR" ), LNUMVAL ( SHUT_WR ) },
     { LSTRKEY( "SHUT_RDWR" ), LNUMVAL ( SHUT_RDWR ) },
