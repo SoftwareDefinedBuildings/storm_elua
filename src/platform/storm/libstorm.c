@@ -958,28 +958,9 @@ int libstorm_net_connectdone_cb(void* sock_ptr) {
     return 0;
 }
 
-/* SOCK MUST be an active socket! Frees HOWMANY outstanding sendstates. */
-uint32_t tcp_free_sendstates(lua_State* L, storm_tcp_socket_t* sock, uint32_t howmany) {
-    uint32_t totalbytesremoved = 0;
-    uint32_t i;
-    size_t strlen;
-    struct sendstate* newhead;
-    for (i = 0; (i < howmany) && (sock->head != NULL); i++) {
-        lua_rawgeti(L, LUA_REGISTRYINDEX, sock->head->ref);
-        lua_tolstring(L, -1, &strlen);
-        lua_pop(L, 1);
-        luaL_unref(L, LUA_REGISTRYINDEX, sock->head->ref);
-        totalbytesremoved += strlen;
-        newhead = sock->head->next;
-        free(sock->head);
-        sock->head = newhead;
-    }
-    if (sock->head == NULL) {
-        sock->tail = NULL;
-    }
-    sock->numoutstanding -= totalbytesremoved;
-    return totalbytesremoved;
-}
+/* SOCK MUST be an active socket! Frees HOWMANY outstanding sendstates.
+   Implementation is below, right under tcpsend(). */
+uint32_t tcp_free_sendstates(lua_State* L, storm_tcp_socket_t* sock, uint32_t howmany);
 
 int libstorm_net_senddone_cb(void* sock_ptr, uint32_t howmany) {
     storm_tcp_socket_t* sock = sock_ptr;
@@ -1326,6 +1307,16 @@ int libstorm_net_tcplistenaccept(lua_State* L) {
     return 1;
 }
 
+#define SENDMAXCOPY 52
+#define COPYBUFSIZE (SENDMAXCOPY << 1)
+
+/* SEND POLICY
+   If a buffer is smaller than or equal to SENDMAXCOPY bytes, then
+   COPYBUFSIZE bytes are allocated, and the buffer is copied into the
+   space. This allows the TCP stack to coalesce small buffers within the
+   remaining space in COPYBUFSIZE.
+   Otherwise, a reference to the buffer is made (in the Lua registry) and
+   the Kernel is provided a reference to the buffer, with no extra space. */
 // Lua: storm.net.tcpsend(socket, buffer)
 int libstorm_net_tcpsend(lua_State* L) {
     char* errparam = "expected (socket, buffer)";
@@ -1335,6 +1326,7 @@ int libstorm_net_tcpsend(lua_State* L) {
     const char* buffer;
     size_t buflen;
     int errno;
+    int copy;
     int state = 0;
     
     if (lua_gettop(L) != 2)
@@ -1348,19 +1340,36 @@ int libstorm_net_tcpsend(lua_State* L) {
         return luaL_error(L, "expected active socket");
         
     buffer = luaL_checklstring(L, 2, &buflen);
-    sstate = malloc(sizeof(struct sendstate));
+    
+    copy = (buflen <= SENDMAXCOPY);
+    
+    if (copy) {
+        sstate = malloc(sizeof(struct sendstate) + COPYBUFSIZE);
+    } else {
+        sstate = malloc(sizeof(struct sendstate));
+    }
+    
     if (sstate == NULL) {
         return luaL_error(L, "out of memory");
     }
-    bufent = &sstate->entry;
-    
-    bufent->iov.iov_base = (uint8_t*) buffer;
-    bufent->iov.iov_len = buflen;
-    bufent->iov.iov_next = NULL;
-    bufent->extraspace = 0;
-    
-    sstate->ref = luaL_ref(L, LUA_REGISTRYINDEX);
     sstate->next = NULL;
+    bufent = &sstate->entry;
+    bufent->iov.iov_next = NULL;
+    bufent->iov.iov_len = buflen;
+        
+    if (copy) {
+        bufent->iov.iov_base = (uint8_t*) (sstate + 1);
+        bufent->extraspace = COPYBUFSIZE - buflen;
+        memcpy(bufent->iov.iov_base, buffer, buflen);
+        
+        sstate->ref = LUA_NOREF;
+    } else {
+        bufent->iov.iov_base = (uint8_t*) buffer;
+        bufent->extraspace = 0;
+        
+        sstate->ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    }
+    
     
     errno = (int) tcp_send(sock->fd, bufent, &state);
     
@@ -1372,15 +1381,47 @@ int libstorm_net_tcpsend(lua_State* L) {
             sock->tail->next = sstate;
         }
         sock->tail = sstate;
-        sock->numoutstanding += buflen;
     } else {
         // Either the send failed, or this was copied into the last buffer already
         free(sstate);
     }
     
+    if (state != 0) {
+        // The send didn't fail, so we need to keep track of queued bytes
+        sock->numoutstanding += buflen;
+    }
+    
     lua_pushnumber(L, errno);
     lua_pushnumber(L, state);
     return 2;
+}
+
+uint32_t tcp_free_sendstates(lua_State* L, storm_tcp_socket_t* sock, uint32_t howmany) {
+    uint32_t totalbytesremoved = 0;
+    uint32_t i;
+    size_t strlen;
+    struct sendstate* newhead;
+    for (i = 0; (i < howmany) && (sock->head != NULL); i++) {
+        if (sock->head->ref == LUA_NOREF) {
+            /* A copy buffer was used for this entry. */
+            totalbytesremoved += (COPYBUFSIZE - sock->head->entry.extraspace);
+        } else {
+            /* A string was referenced for this entry, so we need to free the reference. */
+            lua_rawgeti(L, LUA_REGISTRYINDEX, sock->head->ref);
+            lua_tolstring(L, -1, &strlen);
+            lua_pop(L, 1);
+            luaL_unref(L, LUA_REGISTRYINDEX, sock->head->ref);
+            totalbytesremoved += strlen;
+        }
+        newhead = sock->head->next;
+        free(sock->head);
+        sock->head = newhead;
+    }
+    if (sock->head == NULL) {
+        sock->tail = NULL;
+    }
+    sock->numoutstanding -= totalbytesremoved;
+    return totalbytesremoved;
 }
 
 // Lua: storm.net.tcpoutstanding(socket)
