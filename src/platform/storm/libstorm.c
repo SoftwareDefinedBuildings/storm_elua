@@ -1486,7 +1486,7 @@ int libstorm_net_tcptryrecv(lua_State* L) {
     size_t buflen = lua_tointeger(L, lua_upvalueindex(3)); // the length of the data buffer
     size_t bytesrcvd = (size_t) lua_tointeger(L, lua_upvalueindex(4)); // the number of bytes received so far
     int origcallback = lua_tointeger(L, lua_upvalueindex(5)); // the original callback to restore when done
-    int gotfin = lua_toboolean(L, 1);
+    int gotfin = lua_toboolean(L, 2);
     // At upvalue index 6 is the function that we call once either (1) we finish sending, or (2) we encounter an error.
     
     int errno;
@@ -1561,7 +1561,9 @@ int libstorm_net_tcprecvfull(lua_State* L) {
     lua_pushnumber(L, oldcallback);
     lua_pushvalue(L, 3);
     lua_pushcclosure(L, libstorm_net_tcptryrecv, 6);
-    lua_call(L, 0, 0);
+    lua_pushvalue(L, 1);
+    lua_pushboolean(L, 0);
+    lua_call(L, 2, 0);
     return 0;
 }
 
