@@ -116,6 +116,10 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_u8ptr_u32_u8ptr(uint32_t id
 {
     __syscall_body(ABI_ID_SYSCALL_EX);
 }
+int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_cptr_int_u16ptr(uint32_t id, uint32_t a, char* b, int c, uint16_t* d)
+{
+    __syscall_body(ABI_ID_SYSCALL_EX);
+}
 
 //Some driver specific syscalls
 //--------- GPIO
@@ -205,6 +209,7 @@ int32_t __attribute__((naked)) k_syscall_ex_ri32_u32_u8ptr_u32_u8ptr(uint32_t id
 #define tcp_set_acceptDone_cb(fd, cb, r) k_syscall_ex_ri32_u32_cb_vptr(0xc0e, (fd), (cb), (r))
 #define tcp_isestablished(fd) k_syscall_ex_ri32_u32(0xc0f, (fd))
 #define tcp_hasrcvdfin(fd) k_syscall_ex_ri32_u32(0xc10, (fd))
+#define tcp_peerinfo(fd, addrbuf, addrbuflen, portptr) k_syscall_ex_ri32_u32_cptr_int_u16ptr(0xc11, (fd), (addrbuf), (addrbuflen), (portptr))
 
 lua_State *_cb_L;
 #define MAXPINSPEC 20
@@ -1171,11 +1176,9 @@ int libstorm_net_tcpaddconnectionlost(lua_State* L) {
     return 0;
 }
 
-int libstorm_net_acceptdone_cb(void* sock_ptr, uint32_t arg0port, char* addr) {
+int libstorm_net_acceptdone_cb(void* sock_ptr, uint32_t newfd) {
     storm_tcp_socket_t* sock = sock_ptr;
     storm_tcp_socket_t* newsock;
-    uint16_t port = (uint16_t) (arg0port & 0xFFFF);
-    uint16_t newfd = (uint16_t) (arg0port >> 16);
     int rv;
     const char* msg;
     if (sock->acceptDone_cb_ref == LUA_NOREF) {
@@ -1196,10 +1199,8 @@ int libstorm_net_acceptdone_cb(void* sock_ptr, uint32_t arg0port, char* addr) {
     sock->recv_reass_buf = NULL;
     
     lua_pushlightuserdata(_cb_L, newsock);
-    lua_pushstring(_cb_L, addr);
-    lua_pushnumber(_cb_L, port);
     lua_pushlightuserdata(_cb_L, sock);
-    if ((rv = lua_pcall(_cb_L, 4, 0, 0)) != 0)
+    if ((rv = lua_pcall(_cb_L, 2, 0, 0)) != 0)
     {
         printf("[ERROR] could not run net.acceptdone callback (%d)\n", rv);
         msg = lua_tostring(_cb_L, -1);
@@ -1384,6 +1385,8 @@ int libstorm_net_tcplistenaccept(lua_State* L) {
 #define SENDMAXCOPY 52
 #define COPYBUFSIZE (SENDMAXCOPY << 1)
 
+struct sendstate* extracopybuf = NULL;
+
 /* SEND POLICY
    If a buffer is smaller than or equal to SENDMAXCOPY bytes, then
    COPYBUFSIZE bytes are allocated, and the buffer is copied into the
@@ -1418,7 +1421,12 @@ int libstorm_net_tcpsend(lua_State* L) {
     copy = (buflen <= SENDMAXCOPY);
     
     if (copy) {
-        sstate = malloc(sizeof(struct sendstate) + COPYBUFSIZE);
+        if (extracopybuf == NULL) {
+            sstate = malloc(sizeof(struct sendstate) + COPYBUFSIZE);
+        } else {
+            sstate = extracopybuf;
+            extracopybuf = NULL;
+        }
     } else {
         sstate = malloc(sizeof(struct sendstate));
     }
@@ -1457,7 +1465,13 @@ int libstorm_net_tcpsend(lua_State* L) {
         sock->tail = sstate;
     } else {
         // Either the send failed, or this was copied into the last buffer already
-        free(sstate);
+        if (copy && extracopybuf == NULL) {
+            // Cache this copy buffer that we allocated, to avoid another call to malloc()
+            // Technically, we don't need to check if extracopybuf is NULL; it will always be NULL if we reach this point. But, it's better to be safe...
+            extracopybuf = sstate;
+        } else {
+            free(sstate);
+        }
     }
     
     if (state != 0) {
@@ -1476,9 +1490,16 @@ uint32_t tcp_free_sendstates(lua_State* L, storm_tcp_socket_t* sock, uint32_t ho
     size_t strlen;
     struct sendstate* newhead;
     for (i = 0; (i < howmany) && (sock->head != NULL); i++) {
+        newhead = sock->head->next;
         if (sock->head->ref == LUA_NOREF) {
             /* A copy buffer was used for this entry. */
             totalbytesremoved += (COPYBUFSIZE - sock->head->entry.extraspace);
+            if (extracopybuf == NULL) {
+                // Hang on to a reference, to avoid a future malloc
+                extracopybuf = sock->head;
+            } else {
+                free(sock->head);
+            }
         } else {
             /* A string was referenced for this entry, so we need to free the reference. */
             lua_rawgeti(L, LUA_REGISTRYINDEX, sock->head->ref);
@@ -1486,9 +1507,8 @@ uint32_t tcp_free_sendstates(lua_State* L, storm_tcp_socket_t* sock, uint32_t ho
             lua_pop(L, 1);
             luaL_unref(L, LUA_REGISTRYINDEX, sock->head->ref);
             totalbytesremoved += strlen;
+            free(sock->head);
         }
-        newhead = sock->head->next;
-        free(sock->head);
         sock->head = newhead;
     }
     if (sock->head == NULL) {
@@ -1682,6 +1702,11 @@ int libstorm_net_tcpclose(lua_State* L) {
     if (!sock)
         return luaL_error(L, errparam);
         
+    if (sock->numoutstanding > 0) {
+    	// The send buffer is about to be reclaimed, so we need to abort the connection
+    	tcp_abort(sock->fd);
+    }
+        
     rv = tcp_close(sock->fd);
     free_recv_reass_buf(sock);
     
@@ -1773,6 +1798,29 @@ int libstorm_net_tcphasrcvdfin(lua_State* L) {
     gotfin = tcp_hasrcvdfin(sock->fd);
     lua_pushboolean(L, (int) gotfin);
     return 1;
+}
+
+// Lua: storm.net.tcppeerinfo(socket)
+int libstorm_net_tcppeerinfo(lua_State* L) {
+    char* errparam = "expected (socket)";
+    storm_tcp_socket_t* sock;
+    char addrbuf[40];
+    uint16_t port;
+    
+    if (lua_gettop(L) != 1)
+        return luaL_error(L, errparam);
+        
+    sock = lua_touserdata(L, 1);
+    if (!sock)
+        return luaL_error(L, errparam);
+        
+    if (sock->passive)
+        return luaL_error(L, "expected active socket");
+        
+    tcp_peerinfo(sock->fd, addrbuf, 40, &port);
+    lua_pushstring(L, addrbuf);
+    lua_pushnumber(L, port);
+    return 2;
 }
 
 static int traceback (lua_State *L) {
@@ -2580,6 +2628,7 @@ const LUA_REG_TYPE libstorm_net_map[] =
     { LSTRKEY( "tcprecvfull" ), LFUNCVAL( libstorm_net_tcprecvfull ) },
     { LSTRKEY( "tcpisestablished" ), LFUNCVAL( libstorm_net_tcpisestablished ) },
     { LSTRKEY( "tcphasrcvdfin" ), LFUNCVAL( libstorm_net_tcphasrcvdfin ) },
+    { LSTRKEY( "tcppeerinfo" ), LFUNCVAL( libstorm_net_tcppeerinfo ) },
     { LSTRKEY( "SHUT_RD" ), LNUMVAL ( SHUT_RD ) },
     { LSTRKEY( "SHUT_WR" ), LNUMVAL ( SHUT_WR ) },
     { LSTRKEY( "SHUT_RDWR" ), LNUMVAL ( SHUT_RDWR ) },
