@@ -2643,6 +2643,8 @@ const LUA_REG_TYPE libstorm_net_map[] =
     { LSTRKEY( "ESHUTDOWN" ), LNUMVAL( 58 ) },
     { LSTRKEY( "ETIMEDOUT" ), LNUMVAL( 60 ) },
     { LSTRKEY( "ECONNREFUSED" ), LNUMVAL( 61 ) },
+    { LSTRKEY( "EAFNOSUPPORT" ), LNUMVAL( 47 ) },
+    { LSTRKEY( "EINVAL" ), LNUMVAL( 22 ) },
     { LNILKEY, LNILVAL }
 };
 const LUA_REG_TYPE libstorm_bl_map[] =
