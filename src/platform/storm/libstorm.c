@@ -525,6 +525,28 @@ int libstorm_os_gettable( lua_State *L )
     return 1;
 }
 
+int outputhookref = LUA_NOREF;
+// Lua: storm.os.setoutputhook(cb)
+int libstorm_os_setoutputhook(lua_State* L)
+{
+    _cb_L = L;
+    luaL_unref(L, LUA_REGISTRYINDEX, outputhookref);
+    if (lua_isnil(L, 1)) {
+        outputhookref = LUA_NOREF;
+    } else {
+        outputhookref = luaL_ref(L, LUA_REGISTRYINDEX);
+    }
+    return 0;
+}
+
+void libstorm_os_calloutputhook(const char* buffer, size_t length)
+{
+    if (outputhookref != LUA_NOREF) {
+        lua_rawgeti(_cb_L, LUA_REGISTRYINDEX, outputhookref);
+        lua_pushlstring(_cb_L, buffer, length);
+        lua_call(_cb_L, 1, 0);
+    }
+}
 
 // Lua: storm.io.set( value, pin1, pin2, ..., pinn )
 int libstorm_io_set( lua_State *L )
@@ -1631,6 +1653,7 @@ const LUA_REG_TYPE libstorm_os_map[] =
     { LSTRKEY( "lookuproute" ), LFUNCVAL ( libstorm_os_lookuproute ) },
     { LSTRKEY( "gettable" ), LFUNCVAL ( libstorm_os_gettable ) },
     { LSTRKEY( "setpowerlock"), LFUNCVAL ( libstorm_os_setpowerlock) },
+    { LSTRKEY( "setoutputhook" ), LFUNCVAL ( libstorm_os_setoutputhook ) },
     { LSTRKEY( "ROUTE_IFACE_ALL" ), LNUMVAL ( 0 ) },
     { LSTRKEY( "ROUTE_IFACE_154" ), LNUMVAL ( 1 ) },
     { LSTRKEY( "ROUTE_IFACE_PPP" ), LNUMVAL ( 2 ) },

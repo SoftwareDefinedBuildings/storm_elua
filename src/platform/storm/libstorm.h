@@ -18,6 +18,7 @@ int libstorm_os_cancel( lua_State *L );
 int libstorm_os_now( lua_State *L );
 int libstorm_os_invoke_periodically(lua_State *L);
 int libstorm_os_invoke_later(lua_State *L);
+int libstorm_os_setoutputhook(lua_State* L);
 int libstorm_net_udpsocket(lua_State *L);
 int libstorm_net_close(lua_State *L);
 int libstorm_net_sendto(lua_State *L);
@@ -35,5 +36,7 @@ int libstorm_bl_enable(lua_State *L);
 int libstorm_bl_addservice(lua_State *L);
 int libstorm_bl_addcharacteristic(lua_State *L);
 int libstorm_bl_notify(lua_State *L);
+
+void libstorm_os_calloutputhook(const char* buffer, size_t length);
 
 #endif
