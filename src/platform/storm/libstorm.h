@@ -15,6 +15,7 @@ int libstorm_io_set( lua_State *L );
 int libstorm_io_set_mode( lua_State *L );
 int libstorm_io_set_pull( lua_State *L );
 int libstorm_os_cancel( lua_State *L );
+int libstorm_os_reset( lua_State *L );
 int libstorm_os_now( lua_State *L );
 int libstorm_os_invoke_periodically(lua_State *L);
 int libstorm_os_invoke_later(lua_State *L);
